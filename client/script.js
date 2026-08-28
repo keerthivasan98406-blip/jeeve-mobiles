@@ -22,8 +22,8 @@ class ManjulaMobilesApp {
     const baseURL = isLocalhost 
       ? 'http://localhost:3001' 
       : isGitHubPages 
-        ? 'https://jeeve-mobiles.onrender.com'  // Your Render backend URL
-        : window.location.origin;
+        ? 'https://jeeve-mobiles-api.onrender.com'  // Your Render backend URL
+        : 'https://jeeve-mobiles-api.onrender.com';
     this.API_URL = `${baseURL}/api`
     
     // Socket.IO connection for real-time updates with reconnection

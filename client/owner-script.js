@@ -18,7 +18,7 @@ class OwnerPortalApp {
     
     // MongoDB API URL - Auto-detect local vs production
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const baseURL = isLocalhost ? 'http://localhost:3001' : window.location.origin;
+    const baseURL = isLocalhost ? 'http://localhost:3001' : 'https://jeeve-mobiles-api.onrender.com';
     this.API_URL = `${baseURL}/api`
     
     // Socket.IO connection for real-time updates with reconnection
