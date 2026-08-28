@@ -918,7 +918,7 @@ nav .nav-content {
     gap: 10px;
     position: relative;
     z-index: 1001;
-    overflow: hidden;
+    overflow: visible;
 }
 
 /* Updated nav brand alignment */
@@ -1198,7 +1198,7 @@ nav .nav-content {
     padding: 8px 0;
     min-width: 180px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    z-index: 1000;
+    z-index: 99999;
     display: none;
 }
 
