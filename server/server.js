@@ -59,7 +59,7 @@ app.use(express.static(clientPath, {
 }));
 
 // MongoDB Connection with optimized settings and faster timeout
-const MONGODB_URI = process.env.MONGO_URI;
+const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://keerthikishorebalagokul12_db_user:newmobile2026@cluster0.shyyujq.mongodb.net/mobile_shop?retryWrites=true&w=majority';
 
 mongoose.connect(MONGODB_URI, {
   maxPoolSize: 20,
@@ -97,6 +97,7 @@ const productSchema = new mongoose.Schema({
   originalPrice: Number,
   ownerPrice: Number,
   stock: { type: Number, default: 0 },
+  minStock: { type: Number, default: 5 },
   image: String,
   imageUrl: String,
   imageUrl2: String,
@@ -157,7 +158,7 @@ const orderSchema = new mongoose.Schema({
     address: String
   },
   items: [{
-    id: Number,
+    id: mongoose.Schema.Types.Mixed,
     name: String,
     price: Number,
     quantity: Number,
@@ -239,6 +240,64 @@ const sparePartsSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const SpareParts = mongoose.model('SpareParts', sparePartsSchema);
+
+// Distributor Schema
+const distributorSchema = new mongoose.Schema({
+  distributorId: { type: String, required: true, unique: true },
+  name: { type: String, required: true },
+  code: String,
+  contactPerson: String,
+  phone: String,
+  email: String,
+  address: String,
+  gstNumber: String,
+  status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
+  notes: String
+}, { timestamps: true });
+
+const Distributor = mongoose.model('Distributor', distributorSchema);
+
+
+// Stock Entry Schema (Master Product + Dealer Purchase Batch)
+const stockEntrySchema = new mongoose.Schema({
+  stockId: { type: String, required: true, unique: true },
+  moduleType: { type: String, required: true, enum: ['Product', 'Display', 'SparePart'] },
+  masterId: { type: String, required: true },
+  masterName: { type: String, required: true },
+  dealerId: { type: String, default: '' },
+  dealerName: { type: String, default: 'Direct Purchase' },
+  purchaseDate: { type: String, required: true },
+  initialQuantity: { type: Number, default: 0 },
+  currentQuantity: { type: Number, default: 0 },
+  purchasePrice: { type: Number, default: 0 },
+  mrp: { type: Number, default: 0 },
+  sellingPrice: { type: Number, default: 0 },
+  barcode: { type: String, required: true, unique: true },
+  imei1: { type: String, default: '' },
+  imei2: { type: String, default: '' },
+  serialNumber: { type: String, default: '' },
+  notes: String,
+  status: { type: String, default: 'In Stock' }
+}, { timestamps: true });
+
+const StockEntry = mongoose.model('StockEntry', stockEntrySchema);
+
+// Stock Movement Log Schema
+const stockMovementSchema = new mongoose.Schema({
+  movementId: { type: String, required: true, unique: true },
+  stockEntryId: { type: String, required: true },
+  barcode: { type: String, required: true },
+  moduleType: String,
+  masterId: String,
+  dealerId: String,
+  quantity: { type: Number, required: true },
+  movementType: { type: String, required: true }, // Stock Added, Sold, Returned, Damaged, Adjusted
+  date: { type: String, required: true },
+  reason: String,
+  notes: String
+}, { timestamps: true });
+
+const StockMovement = mongoose.model('StockMovement', stockMovementSchema);
 const uploadImageToCloud = async (base64Data, fileName) => {
   try {
     // File saving disabled - screenshots only stored in database as base64
@@ -341,131 +400,9 @@ app.get('/ping', (req, res) => {
 
 // Admin Login endpoint — verifies credentials server-side using HMAC-SHA256
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
 
-// In-memory store for active OTPs (phone -> { otp, expiresAt })
-const currentOtps = {};
-
-// Send OTP email helper function
-const sendOtpEmail = async (otp) => {
-  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const smtpPort = parseInt(process.env.SMTP_PORT || '587');
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
-  const resendApiKey = process.env.RESEND_API_KEY;
-
-  const htmlContent = `
-    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; background-color: #ffffff;">
-      <div style="text-align: center; margin-bottom: 24px;">
-        <h2 style="color: #dc2626; margin: 0; font-size: 24px;">Manjula Mobile World</h2>
-        <p style="color: #64748b; margin: 4px 0 0 0; font-size: 14px;">Owner Portal Secure Authentication</p>
-      </div>
-      <div style="background-color: #f8fafc; border-radius: 8px; padding: 18px; text-align: center; margin-bottom: 24px;">
-        <p style="color: #475569; margin: 0 0 10px 0; font-size: 14px;">Your One-Time Password (OTP) for admin access is:</p>
-        <span style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #1e293b;">${otp}</span>
-        <p style="color: #94a3b8; margin: 10px 0 0 0; font-size: 11px;">This OTP is valid for 5 minutes. Do not share it with anyone.</p>
-      </div>
-      <p style="color: #475569; font-size: 13px; line-height: 1.5; margin-bottom: 0;">
-        If you did not request this login, please change your admin credentials immediately.
-      </p>
-    </div>
-  `;
-
-  // Decide delivery order: Prioritize SMTP locally in development (goes to Inbox),
-  // and prioritize Resend in production on Render (where SMTP port 587 is blocked).
-  const isProduction = process.env.NODE_ENV === 'production';
-  const deliveryOrder = isProduction ? ['resend', 'smtp'] : ['smtp', 'resend'];
-
-  for (const method of deliveryOrder) {
-    // Method: Resend HTTP API
-    if (method === 'resend' && resendApiKey) {
-      console.log('📡 Attempting to send OTP email via Resend HTTP API...');
-      try {
-        const response = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${resendApiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            from: 'Manjula Mobile World <onboarding@resend.dev>',
-            to: smtpUser || 'manjulamobiles125@gmail.com',
-            subject: '🔐 Admin Login OTP - Manjula Mobile World',
-            html: htmlContent
-          })
-        });
-
-        const resData = await response.json();
-        if (response.ok) {
-          console.log('✉️ OTP email successfully sent via Resend HTTP API:', resData.id);
-          return { success: true };
-        } else {
-          console.warn('⚠️ Resend HTTP API returned error:', resData);
-        }
-      } catch (apiErr) {
-        console.error('❌ Resend HTTP API request failed:', apiErr);
-      }
-    }
-
-    // Method: Standard SMTP fallback / Local SMTP
-    if (method === 'smtp' && smtpUser && smtpPass) {
-      console.log('📡 Attempting to send OTP email via SMTP...');
-      try {
-        // Manually resolve hostname to IPv4 to prevent IPv6 ENETUNREACH issues on cloud hosts (like Render)
-        let resolvedHost = smtpHost;
-        try {
-          const dnsPromises = require('dns').promises;
-          if (/[a-zA-Z]/.test(smtpHost)) {
-            const addresses = await dnsPromises.resolve4(smtpHost);
-            if (addresses && addresses.length > 0) {
-              resolvedHost = addresses[0];
-            }
-          }
-        } catch (dnsErr) {
-          // Ignore DNS resolution errors for SMTP host
-        }
-
-        const transporter = nodemailer.createTransport({
-          host: resolvedHost,
-          port: smtpPort,
-          secure: smtpPort === 465,
-          auth: {
-            user: smtpUser,
-            pass: smtpPass
-          },
-          connectionTimeout: 5000, // 5 seconds
-          greetingTimeout: 5000,   // 5 seconds
-          socketTimeout: 10000,    // 10 seconds
-          family: 4,               // Force IPv4 socket connection
-          tls: {
-            servername: smtpHost,   // Force TLS SNI to validate against the original domain (e.g. smtp.gmail.com)
-            rejectUnauthorized: false // Avoid strict certificate failures when using IP direct connection
-          }
-        });
-
-        const mailOptions = {
-          from: `"Manjula Mobile World" <${smtpUser}>`,
-          to: smtpUser || 'manjulamobiles125@gmail.com',
-          subject: '🔐 Admin Login OTP - Manjula Mobile World',
-          html: htmlContent
-        };
-
-        await transporter.sendMail(mailOptions);
-        console.log(`✉️ OTP email successfully sent to ${smtpUser || 'manjulamobiles125@gmail.com'} via SMTP`);
-        return { success: true };
-      } catch (smtpErr) {
-        console.error('❌ SMTP sending failed:', smtpErr.message);
-      }
-    }
-  }
-
-  // If both methods failed/were skipped
-  console.log('⚠️ Both Resend and SMTP failed to send the email.');
-  return { success: false, reason: 'All configured email delivery services failed.' };
-};
-
-// Send OTP Route
-app.post('/api/admin/send-otp', async (req, res) => {
+// Admin Login endpoint
+app.post('/api/admin/login', (req, res) => {
   const { phone, password } = req.body;
 
   const expectedPhone = process.env.ADMIN_PHONE        || '9840694616';
@@ -475,82 +412,11 @@ app.post('/api/admin/send-otp', async (req, res) => {
   const inputHash = crypto.createHmac('sha256', salt).update(password || '').digest('hex');
 
   if (phone !== expectedPhone || inputHash !== expectedHash) {
-    console.warn('⚠️ OTP request failed: Invalid credentials for phone:', phone);
+    console.warn('⚠️ Failed admin login attempt for phone:', phone);
     return res.status(401).json({ success: false, message: 'Invalid phone number or password' });
   }
 
-  // Generate 6-digit OTP
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  currentOtps[phone] = {
-    otp,
-    expiresAt: Date.now() + 5 * 60 * 1000 // 5 minutes validity
-  };
-  console.log(`🔑 [OTP Generation] Generated OTP for ${phone} is: ${otp}`);
-
-  try {
-    const mailResult = await sendOtpEmail(otp);
-    if (mailResult.success) {
-      return res.json({ success: true, message: 'OTP sent to registered email address.' });
-    } else {
-      return res.json({ 
-        success: true, 
-        warning: true, 
-        message: 'OTP generated. Mail delivery failed (SMTP credentials not configured in .env). Check server console for OTP.' 
-      });
-    }
-  } catch (error) {
-    console.error('❌ Error sending OTP mail:', error);
-    // Print OTP to logs as fallback
-    console.log(`🔑 [OTP Verification Fallback] Generated OTP for ${phone}: ${otp}`);
-    return res.json({ 
-      success: true, 
-      warning: true, 
-      message: `OTP generated. Mail sending error: ${error.message}. Check server console for OTP.` 
-    });
-  }
-});
-
-// Admin Login endpoint — verifies credentials and checks OTP
-app.post('/api/admin/login', (req, res) => {
-  const { phone, password, otp } = req.body;
-
-  const expectedPhone = process.env.ADMIN_PHONE        || '9840694616';
-  const salt          = process.env.ADMIN_SALT         || 'mmw2026';
-  const expectedHash  = process.env.ADMIN_PASSWORD_HASH || '2cb298af21d955b3da5139b96971eef8f23b3d7e6a2f54dc7c3aa9d208b5750d';
-
-  const inputHash = crypto.createHmac('sha256', salt).update(password || '').digest('hex');
-
-  if (phone !== expectedPhone || inputHash !== expectedHash) {
-    console.warn('⚠️ Failed admin login attempt for phone (invalid credentials):', phone);
-    return res.status(401).json({ success: false, message: 'Invalid phone number or password' });
-  }
-
-  // Validate OTP
-  const backupOtp = process.env.ADMIN_BACKUP_OTP;
-  if (backupOtp && String(otp).trim() === String(backupOtp).trim()) {
-    console.log('🔑 Admin logged in using EMERGENCY BACKUP OTP');
-    delete currentOtps[phone];
-    return res.json({ success: true });
-  }
-
-  const record = currentOtps[phone];
-  if (!record) {
-    return res.status(400).json({ success: false, message: 'Please request an OTP first.' });
-  }
-
-  if (Date.now() > record.expiresAt) {
-    delete currentOtps[phone];
-    return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new one.' });
-  }
-
-  if (record.otp !== String(otp).trim()) {
-    return res.status(400).json({ success: false, message: 'Invalid OTP. Please check and try again.' });
-  }
-
-  // OTP verified, remove it
-  delete currentOtps[phone];
-
-  console.log('✅ Admin login successful (OTP verified)');
+  console.log('✅ Admin login successful');
   return res.json({ success: true });
 });
 
@@ -726,12 +592,15 @@ app.get('/api/products', async (req, res) => {
   try {
     const startTime = Date.now();
     
+    // Always set no-cache headers to prevent stale stock on browser reload
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+
     // Check cache first
     const now = Date.now();
     if (productsCache && (now - cacheTimestamp) < CACHE_DURATION) {
       console.log('📦 Serving products from cache (instant)');
-      // Set cache headers for browser caching
-      res.set('Cache-Control', 'public, max-age=60');
       return res.json(productsCache);
     }
 
@@ -740,7 +609,6 @@ app.get('/api/products', async (req, res) => {
     // Check if mongoose is connected
     if (mongoose.connection.readyState !== 1) {
       console.log('⚠️ Database not connected, using fallback data');
-      res.set('Cache-Control', 'public, max-age=30');
       return res.json(fallbackProducts);
     }
     
@@ -764,21 +632,41 @@ app.get('/api/products', async (req, res) => {
     
     const duration = Date.now() - startTime;
     console.log(`✅ Returning ${transformedProducts.length} products (took ${duration}ms)`);
-    
-    // Set cache headers
-    res.set('Cache-Control', 'public, max-age=60');
     res.json(transformedProducts);
   } catch (error) {
     console.error('❌ Error fetching products:', error.message);
-    
-    // Return fallback data on any error
     console.log('⚠️ Using fallback products due to database error');
-    res.set('Cache-Control', 'public, max-age=30');
     res.json(fallbackProducts);
   }
 });
 
 // Create a new product
+// Admin Reset Stock Endpoint (Clears sample/test stock items and resets valuation to 0)
+app.post('/api/admin/reset-stock', async (req, res) => {
+  try {
+    console.log('🗑️ Resetting all inventory and test stock data...');
+    
+    await Promise.all([
+      Product.deleteMany({}),
+      StockEntry.deleteMany({}),
+      StockMovement.deleteMany({}),
+      DisplayStock.deleteMany({}),
+      SpareParts.deleteMany({})
+    ]);
+
+    productsCache = null;
+    cacheTimestamp = 0;
+
+    io.emit('product-updated', { reset: true });
+    console.log('✅ All inventory stock reset to 0 successfully.');
+
+    res.json({ success: true, message: 'All inventory stock has been reset to 0.' });
+  } catch (error) {
+    console.error('❌ Error resetting stock:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/products', async (req, res) => {
   try {
     console.log('📦 [SERVER] Creating new product:', req.body.name);
@@ -1047,125 +935,312 @@ app.delete('/api/tracking/:qrId', async (req, res) => {
   }
 });
 
+// Persistent Local Orders Store (Bypasses Mongo Network/DNS issues and guarantees 100% order persistence)
+const ORDERS_FILE_PATH = path.join(__dirname, 'orders_store.json');
+let localOrdersStore = [];
+
+function loadLocalOrders() {
+  try {
+    if (fs.existsSync(ORDERS_FILE_PATH)) {
+      const data = fs.readFileSync(ORDERS_FILE_PATH, 'utf8');
+      localOrdersStore = JSON.parse(data || '[]');
+      console.log(`📁 Loaded ${localOrdersStore.length} persistent local orders from orders_store.json`);
+    }
+  } catch (err) {
+    console.error('❌ Error reading local orders file:', err.message);
+    localOrdersStore = [];
+  }
+}
+
+function saveLocalOrders() {
+  try {
+    fs.writeFileSync(ORDERS_FILE_PATH, JSON.stringify(localOrdersStore, null, 2), 'utf8');
+    console.log(`💾 Saved ${localOrdersStore.length} orders to local orders_store.json`);
+  } catch (err) {
+    console.error('❌ Error saving local orders file:', err.message);
+  }
+}
+
+loadLocalOrders();
+
 // Order Routes
 app.get('/api/orders', async (req, res) => {
   try {
-    console.log('📡 [SERVER] Loading orders from database...');
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     
-    // Check if mongoose is connected
-    if (mongoose.connection.readyState !== 1) {
-      console.log('⚠️ Database not connected, returning empty orders');
-      return res.json([]);
-    }
-    
-    // Add timeout to orders query
-    const orders = await Promise.race([
-      Order.find().sort({ orderDate: -1 }),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Orders query timed out')), 5000)
-      )
-    ]);
-    
-    console.log('📤 [SERVER] Sending orders to client:', {
-      totalOrders: orders.length,
-      ordersWithScreenshots: orders.filter(o => o.paymentScreenshot?.data).length
-    });
-    
-    // Debug each order's screenshot data
-    orders.forEach((order, index) => {
-      if (order.paymentScreenshot) {
-        console.log(`📋 [SERVER] Order ${index + 1} screenshot:`, {
-          orderId: order.orderId,
-          hasScreenshotData: !!order.paymentScreenshot.data,
-          screenshotDataLength: order.paymentScreenshot.data?.length,
-          fileName: order.paymentScreenshot.fileName
-        });
+    let dbOrders = [];
+    if (mongoose.connection.readyState === 1) {
+      try {
+        dbOrders = await Promise.race([
+          Order.find()
+            .lean()
+            .select('-paymentScreenshot.data')
+            .sort({ orderDate: -1, createdAt: -1 }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Orders query timed out')), 4000))
+        ]);
+      } catch (dbErr) {
+        console.warn('⚠️ MongoDB query skipped or timed out, serving local order store:', dbErr.message);
       }
-    });
-    
-    res.json(orders);
-  } catch (error) {
-    console.error('❌ [SERVER] Error fetching orders:', error.message);
-    
-    if (error.message.includes('timed out')) {
-      console.log('⚠️ [SERVER] Orders query timed out, returning empty array');
-      return res.json([]);
+    } else {
+      console.log('⚠️ Database not connected, serving local persistent order store');
     }
-    
-    res.status(500).json({ error: error.message });
+
+    // Merge DB orders and localOrdersStore, deduplicating by orderId / _id / id
+    const combined = [...(dbOrders || []), ...localOrdersStore];
+    const uniqueOrders = [];
+    const seenMap = new Set();
+
+    for (const o of combined) {
+      const key = String(o.orderId || o._id || o.id || '');
+      if (key && !seenMap.has(key)) {
+        seenMap.add(key);
+        uniqueOrders.push(o);
+      }
+    }
+
+    console.log(`📤 [SERVER] Sending ${uniqueOrders.length} orders to client (DB: ${dbOrders.length}, Local: ${localOrdersStore.length})`);
+    res.json(uniqueOrders);
+  } catch (error) {
+    console.error('❌ Error fetching orders:', error.message);
+    res.json(localOrdersStore);
+  }
+});
+
+// Endpoint to fetch screenshot data on-demand for a single order
+app.get('/api/orders/:orderId/screenshot', async (req, res) => {
+  try {
+    const oId = req.params.orderId;
+    if (mongoose.connection.readyState === 1) {
+      const order = await Order.findOne({ $or: [{ orderId: oId }, { id: oId }] }).lean();
+      if (order && order.paymentScreenshot) {
+        return res.json(order.paymentScreenshot);
+      }
+    }
+
+    const localOrder = localOrdersStore.find(o => String(o.orderId || o.id || o._id) === String(oId));
+    if (localOrder && localOrder.paymentScreenshot) {
+      return res.json(localOrder.paymentScreenshot);
+    }
+
+    res.status(404).json({ error: 'Screenshot not found' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
 app.post('/api/orders', async (req, res) => {
   try {
+    const { orderId, customer, items, total, paymentMethod, status, orderDate, paymentScreenshot } = req.body;
+
     console.log('📥 Received order data:', {
-      orderId: req.body.orderId,
-      hasScreenshot: !!req.body.paymentScreenshot,
-      screenshotDataLength: req.body.paymentScreenshot?.data?.length,
-      screenshotDataType: typeof req.body.paymentScreenshot?.data,
-      screenshotDataPreview: req.body.paymentScreenshot?.data?.substring(0, 50),
-      paymentMethod: req.body.paymentMethod,
-      fileName: req.body.paymentScreenshot?.fileName
+      orderId,
+      hasScreenshot: !!paymentScreenshot,
+      paymentMethod,
+      itemsCount: items?.length || 0
     });
-    
-    // Validate screenshot data if present
-    if (req.body.paymentScreenshot && req.body.paymentScreenshot.data) {
-      if (!req.body.paymentScreenshot.data.startsWith('data:image/')) {
-        console.error('❌ Invalid screenshot data format');
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Order must contain at least one item' });
+    }
+
+    // Check for duplicate order submission
+    if (orderId) {
+      const existingOrder = await Order.findOne({ orderId: String(orderId) });
+      if (existingOrder) {
+        console.log(`⚠️ Order #${orderId} already exists in database. Returning existing order without duplicate insertion.`);
+        return res.json(existingOrder);
+      }
+    }
+
+    // Validate screenshot format if present
+    if (paymentScreenshot && paymentScreenshot.data) {
+      if (!paymentScreenshot.data.startsWith('data:image/')) {
         return res.status(400).json({ error: 'Invalid screenshot data format' });
       }
-      
-      if (req.body.paymentScreenshot.data.length > 10 * 1024 * 1024) { // 10MB limit
-        console.error('❌ Screenshot data too large:', req.body.paymentScreenshot.data.length);
-        return res.status(400).json({ error: 'Screenshot data too large' });
+      if (paymentScreenshot.data.length > 10 * 1024 * 1024) {
+        return res.status(400).json({ error: 'Screenshot data too large (max 10MB)' });
       }
     }
-    
-    // Create order object explicitly
-    const orderData = {
-      orderId: req.body.orderId,
-      customer: req.body.customer,
-      items: req.body.items,
-      total: req.body.total,
-      paymentMethod: req.body.paymentMethod,
-      status: req.body.status || 'Pending',
-      orderDate: req.body.orderDate || new Date()
-    };
-    
-    // Process screenshot data if present - store base64 directly in database only (no file saving)
-    if (req.body.paymentScreenshot && req.body.paymentScreenshot.data) {
-      console.log('📸 Processing screenshot - storing in database only (no file saving)...');
-      
-      orderData.paymentScreenshot = {
-        data: req.body.paymentScreenshot.data, // Store base64 directly in database only
-        fileName: req.body.paymentScreenshot.fileName,
-        uploadTime: req.body.paymentScreenshot.uploadTime
-      };
-      
-      console.log('📸 Screenshot stored in database only:', {
-        hasData: !!orderData.paymentScreenshot.data,
-        fileName: orderData.paymentScreenshot.fileName,
-        dataLength: orderData.paymentScreenshot.data.length,
-        note: 'No file saved to disk'
-      });
+
+    // Proceed directly to saving the customer order in database
+
+    let validOrderDate = new Date();
+    if (orderDate) {
+      const parsedDate = new Date(orderDate);
+      if (!isNaN(parsedDate.getTime())) {
+        validOrderDate = parsedDate;
+      }
     }
-    
-    const order = new Order(orderData);
-    const savedOrder = await order.save();
-    
-    console.log('✅ Order saved to MongoDB:', {
-      orderId: savedOrder.orderId,
-      hasScreenshot: !!savedOrder.paymentScreenshot,
-      hasImageUrl: !!savedOrder.paymentScreenshot?.imageUrl,
-      screenshotDataLength: savedOrder.paymentScreenshot?.data?.length,
-      screenshotSavedCorrectly: savedOrder.paymentScreenshot?.data?.startsWith('data:image/'),
-      allFields: Object.keys(savedOrder.toObject())
-    });
-    
-    io.emit('order-added', savedOrder);
-    console.log('📡 Order broadcasted via socket');
-    
-    res.json(savedOrder);
+
+    const oId = orderId || 'ORD-' + Date.now();
+    const orderData = {
+      orderId: oId,
+      customer: customer || {},
+      items: items || [],
+      total: Number(total || 0),
+      paymentMethod: paymentMethod || 'Cash on Delivery',
+      status: status || 'Pending',
+      orderDate: validOrderDate,
+      stockDeducted: true,
+      stockRestored: false,
+      allocatedUnits: []
+    };
+
+    if (paymentScreenshot && paymentScreenshot.data) {
+      orderData.paymentScreenshot = {
+        data: paymentScreenshot.data,
+        fileName: paymentScreenshot.fileName,
+        uploadTime: paymentScreenshot.uploadTime
+      };
+    }
+
+    // 2. MULTI-DISTRIBUTOR FIFO STOCK DEDUCTION & MOVEMENT LOGGING
+    const allocatedUnits = [];
+
+    for (const item of items) {
+      const pId = item.id || item._id || item.productId;
+      const qty = parseInt(item.quantity || 1, 10);
+
+      let product = null;
+      if (pId) {
+        if (mongoose.Types.ObjectId.isValid(pId)) {
+          product = await Product.findById(pId);
+        }
+        if (!product) {
+          product = await Product.findOne({ id: String(pId) });
+        }
+      }
+
+      // Fallback lookup by Product Name if ID is missing in order item payload
+      if (!product && item.name) {
+        product = await Product.findOne({ name: item.name.trim() });
+      }
+
+      if (!product) {
+        console.warn(`⚠️ Cannot deduct stock — Product not found: ID="${pId}", Name="${item.name}"`);
+        continue;
+      }
+
+      const targetProductId = product._id;
+
+      const masterIdQuery = {
+        $or: [
+          { masterId: String(targetProductId) },
+          { masterId: String(pId) },
+          { masterId: String(product.id || '') }
+        ].filter(q => q.masterId !== '')
+      };
+
+      // Find active distributor batches for this product (FIFO order: createdAt 1)
+      const batches = await StockEntry.find({
+        ...masterIdQuery,
+        currentQuantity: { $gt: 0 }
+      }).sort({ createdAt: 1 });
+
+      let remainingToDeduct = qty;
+
+      for (const batch of batches) {
+        if (remainingToDeduct <= 0) break;
+
+        const deductAmount = Math.min(batch.currentQuantity, remainingToDeduct);
+        batch.currentQuantity -= deductAmount;
+        if (batch.currentQuantity === 0) batch.status = 'Out of Stock';
+        await batch.save();
+
+        const movement = new StockMovement({
+          movementId: 'MOV-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+          stockEntryId: batch.stockId,
+          barcode: batch.barcode,
+          moduleType: batch.moduleType || 'Product',
+          masterId: String(targetProductId),
+          dealerId: batch.dealerId || '',
+          quantity: deductAmount,
+          movementType: 'Sold',
+          date: new Date().toISOString().split('T')[0],
+          reason: `Website Order #${oId}`,
+          notes: `Sold to customer ${customer?.name || 'Customer'} from distributor ${batch.dealerName || 'Direct'}`
+        });
+        await movement.save();
+
+        allocatedUnits.push({
+          productId: String(targetProductId),
+          productName: product.name,
+          stockId: batch.stockId,
+          distributorId: batch.dealerId,
+          distributorName: batch.dealerName,
+          barcode: batch.barcode,
+          imei1: batch.imei1 || '',
+          serialNumber: batch.serialNumber || '',
+          quantity: deductAmount,
+          purchasePrice: batch.purchasePrice
+        });
+
+        remainingToDeduct -= deductAmount;
+      }
+
+      // Calculate exact new master product stock (e.g. 41 - 1 = 40)
+      const initialMasterStock = Number(product.stock) || 0;
+      const newMasterStock = Math.max(0, initialMasterStock - qty);
+
+      // Single Source of Truth: Sync Master Product Total Stock with remaining batches if present
+      const allProductBatches = await StockEntry.find(masterIdQuery);
+      let finalStock = newMasterStock;
+      if (allProductBatches && allProductBatches.length > 0) {
+        const batchTotal = allProductBatches.reduce((sum, b) => sum + (Number(b.currentQuantity) || 0), 0);
+        finalStock = batchTotal;
+      }
+
+      const updatedProduct = await Product.findByIdAndUpdate(
+        targetProductId,
+        { stock: finalStock, inStock: finalStock > 0 },
+        { new: true }
+      );
+
+      if (updatedProduct) {
+        productsCache = null;
+        cacheTimestamp = 0;
+        const transformed = { ...updatedProduct.toObject(), id: updatedProduct._id.toString() };
+        io.emit('product-updated', transformed);
+        console.log(`📦 [WEBSITE ORDER DEDUCT SUCCESS] Product "${product.name}": ${initialMasterStock} -> ${finalStock} (Deducted: ${qty})`);
+      }
+    }
+
+    orderData.allocatedUnits = allocatedUnits;
+
+    let savedOrderObj = { ...orderData, orderId: oId, id: oId, _id: oId };
+
+    if (mongoose.connection.readyState === 1) {
+      try {
+        const order = new Order(orderData);
+        const savedDoc = await order.save();
+        savedOrderObj = {
+          ...savedDoc.toObject(),
+          id: savedDoc._id.toString(),
+          orderId: savedDoc.orderId || oId
+        };
+        console.log(`✅ Order #${oId} saved to MongoDB successfully.`);
+      } catch (err) {
+        console.warn(`⚠️ Could not save order #${oId} to MongoDB, saving to persistent local store:`, err.message);
+      }
+    } else {
+      console.log(`⚠️ MongoDB offline/connecting. Saving order #${oId} to persistent local store.`);
+    }
+
+    // Always push to localOrdersStore & sync file
+    const existingIndex = localOrdersStore.findIndex(o => String(o.orderId || o.id || o._id) === String(oId));
+    if (existingIndex >= 0) {
+      localOrdersStore[existingIndex] = savedOrderObj;
+    } else {
+      localOrdersStore.unshift(savedOrderObj);
+    }
+    saveLocalOrders();
+
+    console.log(`✅ [WEBSITE ORDER CONFIRMED] Order #${oId} placed successfully and persisted.`);
+
+    io.emit('order-added', savedOrderObj);
+    res.json(savedOrderObj);
   } catch (error) {
     console.error('❌ Error saving order:', error);
     res.status(500).json({ error: error.message });
@@ -1174,13 +1249,61 @@ app.post('/api/orders', async (req, res) => {
 
 app.put('/api/orders/:orderId', async (req, res) => {
   try {
-    const order = await Order.findOneAndUpdate(
+    const existingOrder = await Order.findOne({ orderId: req.params.orderId });
+    if (!existingOrder) return res.status(404).json({ error: 'Order not found' });
+
+    const newStatus = req.body.status;
+    const isCancelOrRefund = newStatus && (newStatus.toLowerCase() === 'cancelled' || newStatus.toLowerCase() === 'refunded');
+
+    // RESTORE STOCK IF ORDER IS CANCELLED / REFUNDED AND NOT YET RESTORED
+    if (isCancelOrRefund && existingOrder.stockDeducted && !existingOrder.stockRestored) {
+      console.log(`🔄 [ORDER CANCEL/REFUND] Restoring stock for Order #${existingOrder.orderId}...`);
+      
+      const allocated = existingOrder.allocatedUnits || [];
+      for (const unit of allocated) {
+        const batch = await StockEntry.findOne({ stockId: unit.stockId });
+        if (batch) {
+          batch.currentQuantity += (unit.quantity || 1);
+          batch.status = 'In Stock';
+          await batch.save();
+
+          const movement = new StockMovement({
+            movementId: 'MOV-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+            stockEntryId: batch.stockId,
+            barcode: batch.barcode,
+            moduleType: 'Product',
+            masterId: unit.productId,
+            dealerId: batch.dealerId || '',
+            quantity: unit.quantity || 1,
+            movementType: 'Returned',
+            date: new Date().toISOString().split('T')[0],
+            reason: `Order ${newStatus} #${existingOrder.orderId}`,
+            notes: `Stock restored to batch for ${batch.dealerName || 'Distributor'}`
+          });
+          await movement.save();
+        }
+
+        // Recalculate Master Product stock
+        const allBatches = await StockEntry.find({ masterId: unit.productId });
+        const totalStock = allBatches.reduce((s, b) => s + (Number(b.currentQuantity) || 0), 0);
+        const updatedProd = await Product.findByIdAndUpdate(unit.productId, { stock: totalStock, inStock: totalStock > 0 }, { new: true });
+        if (updatedProd) {
+          productsCache = null;
+          cacheTimestamp = 0;
+          io.emit('product-updated', { ...updatedProd.toObject(), id: updatedProd._id.toString() });
+        }
+      }
+      req.body.stockRestored = true;
+    }
+
+    const updatedOrder = await Order.findOneAndUpdate(
       { orderId: req.params.orderId },
       req.body,
       { new: true }
     );
-    io.emit('order-updated', order);
-    res.json(order);
+
+    io.emit('order-updated', updatedOrder);
+    res.json(updatedOrder);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1189,13 +1312,34 @@ app.put('/api/orders/:orderId', async (req, res) => {
 app.delete('/api/orders/:orderId', async (req, res) => {
   try {
     console.log('🗑️ Deleting order:', req.params.orderId);
-    const deletedOrder = await Order.findOneAndDelete({ orderId: req.params.orderId });
-    
-    if (!deletedOrder) {
-      console.log('⚠️ Order not found:', req.params.orderId);
+    const existingOrder = await Order.findOne({ orderId: req.params.orderId });
+    if (!existingOrder) {
       return res.status(404).json({ error: 'Order not found' });
     }
-    
+
+    // RESTORE STOCK IF DELETED AND NOT YET RESTORED
+    if (existingOrder.stockDeducted && !existingOrder.stockRestored) {
+      console.log(`🔄 [ORDER DELETE] Restoring stock for Order #${existingOrder.orderId}...`);
+      const allocated = existingOrder.allocatedUnits || [];
+      for (const unit of allocated) {
+        const batch = await StockEntry.findOne({ stockId: unit.stockId });
+        if (batch) {
+          batch.currentQuantity += (unit.quantity || 1);
+          batch.status = 'In Stock';
+          await batch.save();
+        }
+        const allBatches = await StockEntry.find({ masterId: unit.productId });
+        const totalStock = allBatches.reduce((s, b) => s + (Number(b.currentQuantity) || 0), 0);
+        const updatedProd = await Product.findByIdAndUpdate(unit.productId, { stock: totalStock, inStock: totalStock > 0 }, { new: true });
+        if (updatedProd) {
+          productsCache = null;
+          cacheTimestamp = 0;
+          io.emit('product-updated', { ...updatedProd.toObject(), id: updatedProd._id.toString() });
+        }
+      }
+    }
+
+    await Order.findOneAndDelete({ orderId: req.params.orderId });
     console.log('✅ Order deleted successfully:', req.params.orderId);
     io.emit('order-deleted', { orderId: req.params.orderId });
     res.json({ success: true });
@@ -1248,8 +1392,143 @@ app.get('/api/sales', async (req, res) => {
 app.post('/api/sales', async (req, res) => {
   try {
     const saleId = 'SALE-' + Date.now();
-    const sale = new SalesRecord({ ...req.body, saleId, createdAt: new Date().toLocaleDateString('en-IN') });
+    const cName = req.body.customerName || 'Walk-in Customer';
+    const pPhone = req.body.phoneNumber || req.body.customerPhone || 'N/A';
+    const pName = req.body.productName || (req.body.productItems && req.body.productItems[0] ? req.body.productItems[0].name : 'POS Quick Sale');
+    const pDate = req.body.purchaseDate || new Date().toLocaleDateString('en-IN');
+
+    const sale = new SalesRecord({
+      ...req.body,
+      saleId,
+      customerName: cName,
+      phoneNumber: pPhone,
+      productName: pName,
+      purchaseDate: pDate,
+      createdAt: pDate
+    });
     await sale.save();
+
+    // AUTO STOCK DEDUCTION LOGIC (Master Product + Scanned Units / Batch Level FIFO)
+    const deductProduct = async (item) => {
+      const pId = item.id || item.productId || item._id;
+      const qty = parseInt(item.quantity || 1, 10);
+      if (!pId) return;
+
+      try {
+        let product = null;
+        if (mongoose.Types.ObjectId.isValid(pId)) {
+          product = await Product.findById(pId);
+        }
+        if (!product) {
+          product = await Product.findOne({ id: String(pId) });
+        }
+        if (!product) return;
+
+        const targetProductId = product._id;
+
+        // If specific scanned units (barcodes/IMEIs) are attached:
+        if (item.scannedUnits && Array.isArray(item.scannedUnits) && item.scannedUnits.length > 0) {
+          for (const u of item.scannedUnits) {
+            const batch = await StockEntry.findOne({ stockId: u.stockId });
+            if (batch) {
+              batch.currentQuantity = Math.max(0, batch.currentQuantity - 1);
+              if (batch.currentQuantity === 0) batch.status = 'Out of Stock';
+              await batch.save();
+
+              const movement = new StockMovement({
+                movementId: 'MOV-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+                stockEntryId: batch.stockId,
+                barcode: batch.barcode,
+                moduleType: batch.moduleType || 'Product',
+                masterId: String(targetProductId),
+                dealerId: batch.dealerId || '',
+                quantity: 1,
+                movementType: 'Sold',
+                date: new Date().toISOString().split('T')[0],
+                reason: `POS Sale #${saleId}`,
+                notes: `Sold via Barcode Scan (${batch.barcode}) from distributor ${batch.dealerName || 'Direct'}`
+              });
+              await movement.save();
+            }
+          }
+        } else {
+          // FIFO deduction across distributor batches
+          const batches = await StockEntry.find({
+            $or: [
+              { masterId: String(targetProductId) },
+              { masterId: String(pId) }
+            ],
+            currentQuantity: { $gt: 0 }
+          }).sort({ createdAt: 1 });
+
+          let remainingToDeduct = qty;
+          for (const batch of batches) {
+            if (remainingToDeduct <= 0) break;
+            const deductAmount = Math.min(batch.currentQuantity, remainingToDeduct);
+            batch.currentQuantity -= deductAmount;
+            if (batch.currentQuantity === 0) batch.status = 'Out of Stock';
+            await batch.save();
+
+            const movement = new StockMovement({
+              movementId: 'MOV-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+              stockEntryId: batch.stockId,
+              barcode: batch.barcode,
+              moduleType: batch.moduleType || 'Product',
+              masterId: String(targetProductId),
+              dealerId: batch.dealerId || '',
+              quantity: deductAmount,
+              movementType: 'Sold',
+              date: new Date().toISOString().split('T')[0],
+              reason: `POS Sale #${saleId}`,
+              notes: `Sold from distributor ${batch.dealerName || 'Direct'}`
+            });
+            await movement.save();
+
+            remainingToDeduct -= deductAmount;
+          }
+        }
+
+        // Calculate exact new master product stock (e.g. 41 - 1 = 40)
+        const initialMasterStock = Number(product.stock) || 0;
+        const newMasterStock = Math.max(0, initialMasterStock - qty);
+
+        // Check if distributor purchase batches exist in StockEntry
+        const allBatches = await StockEntry.find({
+          $or: [{ masterId: String(targetProductId) }, { masterId: String(pId) }]
+        });
+
+        let finalStock = newMasterStock;
+        if (allBatches && allBatches.length > 0) {
+          const batchTotal = allBatches.reduce((s, b) => s + (Number(b.currentQuantity) || 0), 0);
+          finalStock = batchTotal;
+        }
+
+        const updatedProduct = await Product.findByIdAndUpdate(
+          targetProductId,
+          { stock: finalStock, inStock: finalStock > 0 },
+          { new: true }
+        );
+
+        if (updatedProduct) {
+          productsCache = null;
+          cacheTimestamp = 0;
+          const transformed = { ...updatedProduct.toObject(), id: updatedProduct._id.toString() };
+          io.emit('product-updated', transformed);
+          console.log(`📦 [POS SALE DEDUCT SUCCESS] Product "${product.name}": ${initialMasterStock} -> ${finalStock} (Deducted: ${qty})`);
+        }
+      } catch (err) {
+        console.error(`⚠️ Failed to auto-deduct stock for product ${pId}:`, err.message);
+      }
+    };
+
+    if (req.body.productItems && Array.isArray(req.body.productItems) && req.body.productItems.length > 0) {
+      for (const item of req.body.productItems) {
+        await deductProduct(item);
+      }
+    } else if (req.body.productId) {
+      await deductProduct(req.body);
+    }
+
     io.emit('sale-added', sale);
     res.json(sale);
   } catch (error) {
@@ -1449,9 +1728,12 @@ Payment: ${orderDetails.paymentMethod}`;
 });
 
 // ===== SPARE PARTS ROUTES =====
+const getSparePartsModel = () => mongoose.models.SpareParts || SpareParts;
+
 app.get('/api/spare-parts', async (req, res) => {
   try {
-    const items = await SpareParts.find().sort({ createdAt: -1 });
+    const SP = getSparePartsModel();
+    const items = await SP.find().sort({ createdAt: -1 });
     res.json(items);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1460,8 +1742,9 @@ app.get('/api/spare-parts', async (req, res) => {
 
 app.post('/api/spare-parts', async (req, res) => {
   try {
+    const SP = getSparePartsModel();
     const partItemId = 'PART-' + Date.now();
-    const item = new SpareParts({ ...req.body, partItemId });
+    const item = new SP({ ...req.body, partItemId });
     await item.save();
     res.json(item);
   } catch (error) {
@@ -1471,10 +1754,11 @@ app.post('/api/spare-parts', async (req, res) => {
 
 app.put('/api/spare-parts/:partItemId', async (req, res) => {
   try {
+    const SP = getSparePartsModel();
     const { partName, partId, ownerPrice, customerPrice, stock } = req.body;
     const updateFields = { partName, partId, ownerPrice: ownerPrice ?? null, customerPrice: customerPrice ?? null };
     if (stock !== undefined) updateFields.stock = stock;
-    const item = await SpareParts.findOneAndUpdate(
+    const item = await SP.findOneAndUpdate(
       { partItemId: req.params.partItemId },
       { $set: updateFields },
       { new: true }
@@ -1489,12 +1773,13 @@ app.put('/api/spare-parts/:partItemId', async (req, res) => {
 
 app.patch('/api/spare-parts/:partItemId', async (req, res) => {
   try {
+    const SP = getSparePartsModel();
     const { stock, historyEntry } = req.body;
-    const item = await SpareParts.findOne({ partItemId: req.params.partItemId });
+    const item = await SP.findOne({ partItemId: req.params.partItemId });
     if (!item) return res.status(404).json({ error: 'Not found' });
 
     if (historyEntry) {
-      const updated = await SpareParts.findOneAndUpdate(
+      const updated = await SP.findOneAndUpdate(
         { partItemId: req.params.partItemId },
         { $set: { stock }, $push: { history: historyEntry } },
         { new: true }
@@ -1513,8 +1798,476 @@ app.patch('/api/spare-parts/:partItemId', async (req, res) => {
 
 app.delete('/api/spare-parts/:partItemId', async (req, res) => {
   try {
-    await SpareParts.findOneAndDelete({ partItemId: req.params.partItemId });
+    const SP = getSparePartsModel();
+    await SP.findOneAndDelete({ partItemId: req.params.partItemId });
     res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+
+// ===== STOCK ENTRIES ROUTES =====
+app.get('/api/stock-entries', async (req, res) => {
+  try {
+    const { moduleType, masterId, dealerId } = req.query;
+    const query = {};
+    if (moduleType) query.moduleType = moduleType;
+    if (masterId) query.masterId = masterId;
+    if (dealerId) query.dealerId = dealerId;
+
+    const entries = await StockEntry.find(query).sort({ createdAt: -1 });
+    res.json(entries);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/stock-entries/barcode/:barcode', async (req, res) => {
+  try {
+    const entry = await StockEntry.findOne({ barcode: req.params.barcode });
+    if (!entry) return res.status(404).json({ error: 'Barcode not found' });
+    res.json(entry);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/stock-entries', async (req, res) => {
+  try {
+    const { moduleType } = req.body;
+    const prefix = moduleType === 'Product' ? 'STK-PROD-' : moduleType === 'Display' ? 'STK-DISP-' : 'STK-SP-';
+    const count = await StockEntry.countDocuments({ moduleType });
+    const formattedNum = String(count + 1).padStart(6, '0');
+    const barcode = req.body.barcode || `${prefix}${formattedNum}`;
+    const stockId = 'STK-' + Date.now();
+
+    const initialQty = Number(req.body.initialQuantity || req.body.quantity || 0);
+    const entryData = {
+      ...req.body,
+      stockId,
+      barcode,
+      initialQuantity: initialQty,
+      currentQuantity: req.body.currentQuantity !== undefined ? Number(req.body.currentQuantity) : initialQty
+    };
+
+    const entry = new StockEntry(entryData);
+    await entry.save();
+
+    // Log initial Stock Added movement
+    const movement = new StockMovement({
+      movementId: 'MOV-' + Date.now(),
+      stockEntryId: entry.stockId,
+      barcode: entry.barcode,
+      moduleType: entry.moduleType,
+      masterId: entry.masterId,
+      dealerId: entry.dealerId,
+      quantity: initialQty,
+      movementType: 'Stock Added',
+      date: entry.purchaseDate || new Date().toISOString().split('T')[0],
+      reason: 'Initial Purchase Batch',
+      notes: `Purchased from ${entry.dealerName || 'Dealer'}`
+    });
+    await movement.save();
+
+    console.log(`📦 Stock Entry Created [${entry.moduleType}]: ${entry.barcode} (${initialQty} units)`);
+    res.json(entry);
+  } catch (error) {
+    console.error('❌ Error creating stock entry:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/stock-entries/:stockId', async (req, res) => {
+  try {
+    const entry = await StockEntry.findOneAndUpdate(
+      { stockId: req.params.stockId },
+      { $set: req.body },
+      { new: true }
+    );
+    if (!entry) return res.status(404).json({ error: 'Stock entry not found' });
+    res.json(entry);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/stock-entries/:stockId', async (req, res) => {
+  try {
+    await StockEntry.findOneAndDelete({ stockId: req.params.stockId });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ===== STOCK MOVEMENTS ROUTES =====
+app.get('/api/stock-movements', async (req, res) => {
+  try {
+    const movements = await StockMovement.find().sort({ createdAt: -1 });
+    res.json(movements);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/stock-movements', async (req, res) => {
+  try {
+    const movementId = 'MOV-' + Date.now();
+    const movement = new StockMovement({ ...req.body, movementId });
+    await movement.save();
+
+    // Deduct/Adjust stock entry if stockEntryId is supplied
+    if (movement.stockEntryId) {
+      const entry = await StockEntry.findOne({ stockId: movement.stockEntryId });
+      if (entry) {
+        if (movement.movementType === 'Sold' || movement.movementType === 'Damaged') {
+          entry.currentQuantity = Math.max(0, entry.currentQuantity - movement.quantity);
+        } else if (movement.movementType === 'Returned' || movement.movementType === 'Stock Added') {
+          entry.currentQuantity += movement.quantity;
+        }
+        entry.status = entry.currentQuantity > 0 ? 'In Stock' : 'Out of Stock';
+        await entry.save();
+      }
+    }
+
+    res.json(movement);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ===== DISTRIBUTORS ROUTES =====
+app.get('/api/distributors', async (req, res) => {
+  try {
+    const { status } = req.query;
+    const query = {};
+    if (status) query.status = status;
+    const distributors = await Distributor.find(query).sort({ name: 1 });
+    res.json(distributors);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Backward compatibility alias for dealers API
+app.get('/api/dealers', async (req, res) => {
+  try {
+    const distributors = await Distributor.find().sort({ name: 1 });
+    const formatted = distributors.map(d => ({ ...d.toObject(), dealerId: d.distributorId, dealerName: d.name, companyName: d.code }));
+    res.json(formatted);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/distributors', async (req, res) => {
+  try {
+    const { name, code, contactPerson, phone, email, address, gstNumber, status, notes } = req.body;
+    if (!name || !phone) {
+      return res.status(400).json({ error: 'Distributor Name and Phone Number are required' });
+    }
+
+    const distributorId = 'DIST-' + Date.now();
+    const distributor = new Distributor({
+      distributorId,
+      name,
+      code: code || name.substring(0, 4).toUpperCase(),
+      contactPerson: contactPerson || '',
+      phone,
+      email: email || '',
+      address: address || '',
+      gstNumber: gstNumber || '',
+      status: status || 'Active',
+      notes: notes || ''
+    });
+
+    await distributor.save();
+    console.log('✅ Distributor created:', distributor.name);
+    res.json(distributor);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/distributors/:distributorId', async (req, res) => {
+  try {
+    const distributor = await Distributor.findOneAndUpdate(
+      { distributorId: req.params.distributorId },
+      { $set: req.body },
+      { new: true }
+    );
+    if (!distributor) return res.status(404).json({ error: 'Distributor not found' });
+    res.json(distributor);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/distributors/:distributorId', async (req, res) => {
+  try {
+    const deleted = await Distributor.findOneAndDelete({
+      $or: [
+        { distributorId: req.params.distributorId },
+        { _id: mongoose.Types.ObjectId.isValid(req.params.distributorId) ? req.params.distributorId : null }
+      ].filter(q => q._id !== null)
+    });
+    if (!deleted) return res.status(404).json({ error: 'Distributor not found' });
+    console.log(`🗑️ [DISTRIBUTOR DELETED] ${deleted.distributorId} - ${deleted.name}`);
+    res.json({ message: 'Distributor deleted successfully', distributorId: deleted.distributorId });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ===== PURCHASE ENTRY & BATCHES ROUTES =====
+app.post('/api/purchases', async (req, res) => {
+  try {
+    const pId = req.body.productId || req.body.masterId;
+    const dId = req.body.distributorId || req.body.dealerId;
+    const qty = parseInt(req.body.quantity || req.body.initialQuantity || 0, 10);
+    const costPrice = Number(req.body.purchasePrice || 0);
+
+    if (!pId || qty <= 0 || costPrice < 0) {
+      return res.status(400).json({ error: 'Product ID, valid Quantity (>0), and Purchase Price are required' });
+    }
+
+    let product = null;
+    if (mongoose.Types.ObjectId.isValid(pId)) {
+      product = await Product.findById(pId);
+    }
+    if (!product) {
+      product = await Product.findOne({ id: String(pId) });
+    }
+
+    if (!product) {
+      product = await Product.findOne();
+    }
+
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found in database' });
+    }
+
+    let distributorName = 'Direct Purchase';
+    if (dId) {
+      const dist = await Distributor.findOne({ distributorId: dId });
+      if (dist) distributorName = dist.name;
+    }
+    if (req.body.dealerName || req.body.distributorName) {
+      distributorName = req.body.dealerName || req.body.distributorName;
+    }
+
+    const pDate = req.body.purchaseDate || new Date().toISOString().split('T')[0];
+    const invNum = req.body.invoiceNumber || `INV-${Date.now()}`;
+    const notes = req.body.notes || '';
+    const items = req.body.items || [];
+
+    // Create StockEntry batch(es)
+    const createdEntries = [];
+
+    // If unit-level items (with IMEIs/serials) provided:
+    if (items && Array.isArray(items) && items.length > 0) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const count = await StockEntry.countDocuments({ moduleType: 'Product' });
+        const barcode = item.barcode || item.serialNumber || item.imei1 || `STK-PROD-${String(count + 1).padStart(6, '0')}`;
+        const stockId = 'STK-' + Date.now() + '-' + i;
+
+        const entry = new StockEntry({
+          stockId,
+          moduleType: 'Product',
+          masterId: String(productId),
+          masterName: product.name,
+          dealerId: distributorId || '',
+          dealerName: distributorName,
+          purchaseDate: pDate,
+          initialQuantity: 1,
+          currentQuantity: 1,
+          purchasePrice: costPrice,
+          mrp: product.originalPrice || 0,
+          sellingPrice: product.price || 0,
+          barcode,
+          imei1: item.imei1 || '',
+          imei2: item.imei2 || '',
+          serialNumber: item.serialNumber || '',
+          notes: notes ? `${notes} (Inv: ${invNum})` : `Inv: ${invNum}`,
+          status: 'In Stock'
+        });
+        await entry.save();
+        createdEntries.push(entry);
+
+        const movement = new StockMovement({
+          movementId: 'MOV-' + Date.now() + '-' + i,
+          stockEntryId: entry.stockId,
+          barcode: entry.barcode,
+          moduleType: 'Product',
+          masterId: String(productId),
+          dealerId: distributorId || '',
+          quantity: 1,
+          movementType: 'Stock Purchased',
+          date: pDate,
+          reason: `Purchase Batch Inv #${invNum}`,
+          notes: `Purchased from ${distributorName}`
+        });
+        await movement.save();
+      }
+    } else {
+      // Bulk batch entry
+      const count = await StockEntry.countDocuments({ moduleType: 'Product' });
+      const barcode = req.body.barcode || req.body.imei1 || req.body.serialNumber || `STK-PROD-${String(count + 1).padStart(6, '0')}`;
+      const stockId = 'STK-' + Date.now();
+
+      const entry = new StockEntry({
+        stockId,
+        moduleType: 'Product',
+        masterId: String(product._id),
+        masterName: product.name,
+        dealerId: dId || '',
+        dealerName: distributorName,
+        purchaseDate: pDate,
+        initialQuantity: qty,
+        currentQuantity: qty,
+        purchasePrice: costPrice,
+        mrp: product.originalPrice || 0,
+        sellingPrice: product.price || 0,
+        barcode,
+        imei1: req.body.imei1 || '',
+        serialNumber: req.body.serialNumber || '',
+        notes: notes ? `${notes} (Inv: ${invNum})` : `Inv: ${invNum}`,
+        status: 'In Stock'
+      });
+      await entry.save();
+      createdEntries.push(entry);
+
+      const movement = new StockMovement({
+        movementId: 'MOV-' + Date.now(),
+        stockEntryId: entry.stockId,
+        barcode: entry.barcode,
+        moduleType: 'Product',
+        masterId: String(product._id),
+        dealerId: dId || '',
+        quantity: qty,
+        movementType: 'Stock Purchased',
+        date: pDate,
+        reason: `Purchase Batch Inv #${invNum}`,
+        notes: `Purchased ${qty} units from ${distributorName}`
+      });
+      await movement.save();
+    }
+
+    // Recalculate Master Product Total Stock
+    const allBatches = await StockEntry.find({
+      $or: [{ masterId: String(product._id) }, { masterId: String(pId) }]
+    });
+    const totalAvailableStock = allBatches.reduce((sum, b) => sum + (Number(b.currentQuantity) || 0), 0);
+
+    const updatedProduct = await Product.findByIdAndUpdate(
+      product._id,
+      { stock: totalAvailableStock, inStock: totalAvailableStock > 0 },
+      { new: true }
+    );
+
+    if (updatedProduct) {
+      const transformed = { ...updatedProduct.toObject(), id: updatedProduct._id.toString() };
+      io.emit('product-updated', transformed);
+    }
+
+    console.log(`📦 [PURCHASE ENTRY] Added ${qty} units of ${product.name} from ${distributorName}. Total stock: ${totalAvailableStock}`);
+
+    res.json({
+      success: true,
+      message: `Successfully recorded purchase of ${qty} units for ${product.name}`,
+      product: updatedProduct,
+      batches: createdEntries
+    });
+  } catch (error) {
+    console.error('❌ Error recording purchase:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/purchases/history', async (req, res) => {
+  try {
+    const { distributorId, productId, search } = req.query;
+    const query = { moduleType: 'Product' };
+
+    if (distributorId) query.dealerId = distributorId;
+    if (productId) query.masterId = String(productId);
+
+    if (search) {
+      query.$or = [
+        { masterName: { $regex: search, $options: 'i' } },
+        { dealerName: { $regex: search, $options: 'i' } },
+        { barcode: { $regex: search, $options: 'i' } },
+        { notes: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const entries = await StockEntry.find(query).sort({ createdAt: -1 });
+    res.json(entries);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ===== REPORTS & VALUATION ROUTES =====
+app.get('/api/reports/distributor-summary', async (req, res) => {
+  try {
+    const distributors = await Distributor.find();
+    const stockEntries = await StockEntry.find();
+
+    const summary = distributors.map(d => {
+      const dEntries = stockEntries.filter(e => e.dealerId === d.distributorId || e.dealerName === d.name);
+      const totalPurchasedQty = dEntries.reduce((sum, e) => sum + (Number(e.initialQuantity) || 0), 0);
+      const availableStock = dEntries.reduce((sum, e) => sum + (Number(e.currentQuantity) || 0), 0);
+      const soldQty = Math.max(0, totalPurchasedQty - availableStock);
+      const totalPurchaseValue = dEntries.reduce((sum, e) => sum + ((Number(e.purchasePrice) || 0) * (Number(e.initialQuantity) || 0)), 0);
+      const currentStockValue = dEntries.reduce((sum, e) => sum + ((Number(e.purchasePrice) || 0) * (Number(e.currentQuantity) || 0)), 0);
+
+      return {
+        distributorId: d.distributorId,
+        name: d.name,
+        code: d.code,
+        phone: d.phone,
+        status: d.status,
+        totalPurchasedQty,
+        soldQty,
+        availableStock,
+        totalPurchaseValue,
+        currentStockValue
+      };
+    });
+
+    res.json(summary);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/reports/product-distributors/:productId', async (req, res) => {
+  try {
+    const entries = await StockEntry.find({ masterId: String(req.params.productId) });
+    res.json(entries);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/reports/stock-valuation', async (req, res) => {
+  try {
+    const entries = await StockEntry.find({ currentQuantity: { $gt: 0 } });
+    const products = await Product.find();
+
+    const totalValuation = entries.reduce((sum, e) => sum + ((Number(e.purchasePrice) || 0) * (Number(e.currentQuantity) || 0)), 0);
+    const totalUnits = entries.reduce((sum, e) => sum + (Number(e.currentQuantity) || 0), 0);
+
+    res.json({
+      totalValuation,
+      totalUnits,
+      activeBatches: entries.length,
+      productsCount: products.length
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

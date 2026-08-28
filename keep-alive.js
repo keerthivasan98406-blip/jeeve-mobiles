@@ -1,7 +1,7 @@
 // Keep-Alive Service to prevent Render from sleeping
 const https = require('https');
 
-const WEBSITE_URL = 'https://manjulamobilesworld-whwt.onrender.com';
+const WEBSITE_URL = 'https://jeeve-mobiles.onrender.com';
 const PING_INTERVAL = 14 * 60 * 1000; // 14 minutes (before 15-minute sleep)
 
 function pingWebsite() {

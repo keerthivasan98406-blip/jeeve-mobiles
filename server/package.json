@@ -1,7 +1,7 @@
 {
-  "name": "manjula-mobiles",
+  "name": "jivi-mobiles",
   "version": "1.0.0",
-  "description": "Mobile Repair Tracking System with Real-time Updates",
+  "description": "Laptop & Mobile Sales & Service System",
   "main": "server.js",
   "engines": {
     "node": ">=18.0.0"

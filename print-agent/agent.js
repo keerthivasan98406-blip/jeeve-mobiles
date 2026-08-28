@@ -1,5 +1,5 @@
 /**
- * Manjula Mobiles - Print Agent
+ * Jivi Mobiles - Print Agent
  * 
  * Runs on the shop PC. Listens on port 9101.
  * The website sends TSPL to this agent, which prints directly to the Zenpert.
@@ -77,7 +77,7 @@ const server = http.createServer((req, res) => {
   // Health check
   if (req.method === 'GET' && req.url === '/') {
     res.writeHead(200);
-    res.end(JSON.stringify({ status: 'Manjula Print Agent running', printer: PRINTER_NAME }));
+    res.end(JSON.stringify({ status: 'Jivi Mobiles Print Agent running', printer: PRINTER_NAME }));
     return;
   }
 
@@ -88,7 +88,7 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, '127.0.0.1', () => {
   console.log('');
   console.log('╔═════════════════════════════════════════╗');
-  console.log('║   MANJULA MOBILES - Print Agent         ║');
+  console.log('║   JIVI MOBILES - Print Agent            ║');
   console.log('╚═════════════════════════════════════════╝');
   console.log('');
   console.log(`✅ Agent running on port ${PORT}`);

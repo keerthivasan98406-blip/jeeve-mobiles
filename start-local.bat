@@ -1,8 +1,8 @@
 @echo off
-title Manjula Mobiles - Local Server
+title ஜிவி மொபைல்ஸ் - Jivi Mobiles - Local Server
 echo.
 echo ========================================
-echo   MANJULA MOBILE WORLD - Local Server
+echo   JIVI MOBILES - Local Server
 echo ========================================
 echo.
 echo Starting server on http://localhost:3001

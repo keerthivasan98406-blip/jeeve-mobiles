@@ -1,24 +1,24 @@
 {
   "@context": "https://schema.org",
   "@type": "LocalBusiness",
-  "name": "Manjula Mobile World",
-  "alternateName": ["Manjulamobil", "Manjula Mobile", "Manjula Mobiles World"],
-  "description": "Professional mobile phone repair services, spare parts, and accessories in Ramapuram, Tamil Nadu. Expert technicians, quality parts, 24/7 emergency service available.",
-  "url": "https://manjulamobilesworld.onrender.com",
-  "telephone": "+91-82484-54841",
-  "email": "manjulamobiles125@gmail.com",
+  "name": "ஜிவி மொபைல்ஸ் — Jivi Mobiles",
+  "alternateName": ["Jivi Mobiles", "Jivi Mobile World", "ஜிவி மொபைல்ஸ்"],
+  "description": "Laptop & Mobile Sales / Service in Vanthavasi, Tamil Nadu. Professional laptop and smartphone sales, expert repairs, genuine spare parts, and accessories.",
+  "url": "https://jeeve-mobiles.onrender.com",
+  "telephone": "+91-84890-62593",
+  "email": "jivimobiles@gmail.com",
   "address": {
     "@type": "PostalAddress",
-    "streetAddress": "Ramapuram",
-    "addressLocality": "Ramapuram", 
+    "streetAddress": "Vanthavasi",
+    "addressLocality": "Vanthavasi", 
     "addressRegion": "Tamil Nadu",
-    "postalCode": "603201",
+    "postalCode": "604408",
     "addressCountry": "IN"
   },
   "geo": {
     "@type": "GeoCoordinates",
-    "latitude": "13.0827",
-    "longitude": "80.2707"
+    "latitude": "12.5042",
+    "longitude": "79.6083"
   },
   "openingHours": [
     "Mo-Su 09:00-22:00"
@@ -29,59 +29,43 @@
   ],
   "logo": "https://i.pinimg.com/736x/e3/6f/79/e36f793e016dd6b35cd27f84030b7487.jpg",
   "sameAs": [
-    "https://manjulamobilesworld.onrender.com"
+    "https://jeeve-mobiles.onrender.com"
   ],
   "serviceArea": {
     "@type": "Place",
-    "name": "Ramapuram, Tamil Nadu, India"
+    "name": "Vanthavasi, Tamil Nadu, India"
   },
   "areaServed": [
-    "Ramapuram",
-    "Chennai",
+    "Vanthavasi",
+    "Tiruvannamalai",
     "Tamil Nadu"
   ],
   "hasOfferCatalog": {
     "@type": "OfferCatalog",
-    "name": "Mobile Repair Services & Parts",
+    "name": "Laptop & Mobile Sales / Service",
     "itemListElement": [
       {
         "@type": "Offer",
         "itemOffered": {
           "@type": "Service",
-          "name": "iPhone Repair",
-          "description": "Professional iPhone screen replacement, battery replacement, and repair services"
+          "name": "Laptop Sales & Service",
+          "description": "Professional laptop sales, service, upgrades, and maintenance"
         }
       },
       {
         "@type": "Offer",
         "itemOffered": {
           "@type": "Service", 
-          "name": "Samsung Mobile Repair",
-          "description": "Samsung smartphone repair services including screen and battery replacement"
+          "name": "Mobile Phone Service",
+          "description": "Smartphone screen replacement, battery replacement, and board repair"
         }
       },
       {
         "@type": "Offer",
         "itemOffered": {
           "@type": "Service",
-          "name": "Mobile Screen Replacement", 
-          "description": "Professional mobile screen replacement service for all brands"
-        }
-      },
-      {
-        "@type": "Offer",
-        "itemOffered": {
-          "@type": "Service",
-          "name": "Mobile Battery Replacement",
-          "description": "Mobile battery replacement service with quality batteries"
-        }
-      },
-      {
-        "@type": "Offer",
-        "itemOffered": {
-          "@type": "Product",
-          "name": "Mobile Parts & Accessories",
-          "description": "Quality mobile parts, chargers, cases, and accessories"
+          "name": "Mobile & Laptop Accessories", 
+          "description": "Quality laptop chargers, mobile cases, screen guards, and spare parts"
         }
       }
     ]
@@ -90,7 +74,7 @@
     "@type": "Review",
     "reviewRating": {
       "@type": "Rating",
-      "ratingValue": "4.8",
+      "ratingValue": "4.9",
       "bestRating": "5"
     },
     "author": {
@@ -100,7 +84,7 @@
   },
   "aggregateRating": {
     "@type": "AggregateRating",
-    "ratingValue": "4.8",
-    "reviewCount": "150"
+    "ratingValue": "4.9",
+    "reviewCount": "200"
   }
 }

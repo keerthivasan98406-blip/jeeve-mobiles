@@ -1,4 +1,4 @@
-# 🚀 SEO Setup Guide for Manjula Mobile World
+# 🚀 SEO Setup Guide for ஜிவி மொபைல்ஸ் — Jivi Mobiles
 
 ## Why Your Website Isn't Showing in Google
 
@@ -12,7 +12,7 @@ Your website is new and hasn't been indexed by Google yet. Here's how to fix it:
 
 ### 1.2 Add Your Property
 - Click "Add Property"
-- Enter your website URL: `https://keerthivasan98406-blip.github.io/manjulamobileworld/`
+- Enter your website URL: `https://keerthivasan98406-blip.github.io/jeeve-mobiles/`
 - Click "Continue"
 
 ### 1.3 Verify Ownership
@@ -71,14 +71,12 @@ Your website is new and hasn't been indexed by Google yet. Here's how to fix it:
 
 ### 5.1 Keywords Already Added ✅
 Your website already has these keywords:
-- manjula mobile world
-- manjulamobileworld
-- manjula mobiles world
-- manjulamobilesworld
-- manjula mobiles
-- manjulamobil
-- mobile world ramapuram
-- mobile repair ramapuram
+- ஜிவி மொபைல்ஸ்
+- jivi mobiles
+- jivi mobiles vanthavasi
+- laptop sales service vanthavasi
+- mobile repair vanthavasi
+- mobile sales vanthavasi
 
 ### 5.2 Create Content
 - Add blog posts about mobile repair tips
@@ -110,20 +108,20 @@ Your website already has these keywords:
 ## 🔍 Check Indexing Status
 
 ### Method 1: Google Search
-Search: `site:keerthivasan98406-blip.github.io/manjulamobileworld`
+Search: `site:keerthivasan98406-blip.github.io/jeeve-mobiles`
 
 ### Method 2: Google Search Console
 - Check "Coverage" report
 - See indexed pages
 
-## 📱 Local SEO for Ramapuram
+## 📱 Local SEO for Vanthavasi
 
 ### Create Google My Business
 1. Go to: https://business.google.com
-2. Add business name: "Manjula Mobile World"
-3. Add address: Ramapuram, Tamil Nadu
-4. Add phone: +91 82484 54841
-5. Add category: Mobile Phone Repair Shop
+2. Add business name: "ஜிவி மொபைல்ஸ் — Jivi Mobiles"
+3. Add address: Vanthavasi, Tamil Nadu
+4. Add phone: +91 84890 62593 / +91 96295 16788
+5. Add category: Mobile & Laptop Sales & Service Shop
 6. Add photos of your shop
 7. Add business hours
 8. Verify your business

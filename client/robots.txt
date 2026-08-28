@@ -2,7 +2,7 @@ User-agent: *
 Allow: /
 
 # Sitemap
-Sitemap: https://keerthivasan98406-blip.github.io/manjulamobileworld/sitemap.xml
+Sitemap: https://keerthivasan98406-blip.github.io/jeeve-mobiles/sitemap.xml
 
 # Disallow admin areas
 Disallow: /owner.html

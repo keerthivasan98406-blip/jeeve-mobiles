@@ -1,4 +1,4 @@
-// Manjula Mobile World - Complete JavaScript Application with MongoDB
+// ஜிவி மொபைல்ஸ் — Jivi Mobiles - Complete JavaScript Application with MongoDB
 class ManjulaMobilesApp {
   constructor() {
     this.currentPage = "home"
@@ -9,6 +9,7 @@ class ManjulaMobilesApp {
     this.productSearch = ""
     this.mobileMenuOpen = false
     this.orders = [];
+    this.isSubmittingOrder = false;
     this.serviceSubMenuOpen = false;
     this.mobileServiceSubMenuOpen = false;
     this.upiLink = "9894703254@upi"
@@ -21,7 +22,7 @@ class ManjulaMobilesApp {
     const baseURL = isLocalhost 
       ? 'http://localhost:3001' 
       : isGitHubPages 
-        ? 'https://manjulamobilesworld.onrender.com'  // Your Render backend URL
+        ? 'https://jeeve-mobiles.onrender.com'  // Your Render backend URL
         : window.location.origin;
     this.API_URL = `${baseURL}/api`
     
@@ -42,10 +43,10 @@ class ManjulaMobilesApp {
     
     // Carousel properties
     this.carouselImages = [
-      "./public/assets/images/1.jpg",
-      "./public/assets/images/2.jpg",
-      "./public/assets/images/3.jpg",
-      "./public/assets/images/4.jpg"
+      "./public/assets/images/1.png",
+      "./public/assets/images/2.png",
+      "./public/assets/images/3.png",
+      "./public/assets/images/4.png"
     ];
     this.currentCarouselIndex = 0;
     this.carouselInterval = null;
@@ -89,7 +90,7 @@ class ManjulaMobilesApp {
 
   // Calculate years of experience dynamically based on business start year
   getYearsOfExperience() {
-    const businessStartYear = 2017; // Manjula Mobile World started in 2017
+    const businessStartYear = 2017; // ஜிவி மொபைல்ஸ் — Jivi Mobiles started in 2017
     const currentYear = new Date().getFullYear();
     return currentYear - businessStartYear;
   }
@@ -195,9 +196,14 @@ class ManjulaMobilesApp {
 
     this.socket.on('order-added', (order) => {
       console.log('🛒 New order received:', order);
-      const exists = this.orders.find(o => o.orderId === order.orderId);
+      if (!order) return;
+      const orderIdStr = String(order.orderId || order.id || order._id || '');
+      const exists = this.orders.find(o => {
+        const oIdStr = String(o.orderId || o.id || o._id || '');
+        return (orderIdStr && oIdStr === orderIdStr) || (o.orderId && order.orderId && String(o.orderId) === String(order.orderId));
+      });
       if (!exists) {
-        this.orders.push(order);
+        this.orders.unshift(order);
         if (this.currentPage === 'dashboard') {
           this.renderPage(this.currentPage);
         }
@@ -309,8 +315,8 @@ class ManjulaMobilesApp {
         price: 45000,
         originalPrice: 50000,
         image: "📱",
-        imageUrl: "./public/assets/images/1.jpg",
-        imageUrl2: "./public/assets/images/2.jpg",
+        imageUrl: "./public/assets/images/1.png",
+        imageUrl2: "./public/assets/images/2.png",
         rating: 4.8,
         reviews: 234,
         inStock: true,
@@ -443,14 +449,31 @@ class ManjulaMobilesApp {
         screenshotDataLength: savedOrder.paymentScreenshot?.data?.length
       });
       
-      // Add to local array
-      this.orders.push(savedOrder);
+      // Add to local array (avoid duplicates)
+      const savedIdStr = String(savedOrder.orderId || savedOrder.id || savedOrder._id || '');
+      const exists = this.orders.some(o => {
+        const oIdStr = String(o.orderId || o.id || o._id || '');
+        return savedIdStr && oIdStr === savedIdStr;
+      });
+      if (!exists) {
+        this.orders.unshift(savedOrder);
+      }
+
+      // Re-fetch fresh products from database immediately so stock reflects updated count
+      await this.loadProductsFromStorage();
       
       return savedOrder;
     } catch (error) {
       console.error('❌ Error saving order:', error);
-      // Still add to local array as fallback
-      this.orders.push(order);
+      // Still add to local array as fallback (avoid duplicates)
+      const orderIdStr = String(order.orderId || order.id || order._id || '');
+      const exists = this.orders.some(o => {
+        const oIdStr = String(o.orderId || o.id || o._id || '');
+        return orderIdStr && oIdStr === orderIdStr;
+      });
+      if (!exists) {
+        this.orders.unshift(order);
+      }
       throw error;
     }
   }
@@ -591,8 +614,8 @@ class ManjulaMobilesApp {
             
             <!-- Loading Text -->
             <div class="loading-text">
-              <h2>Manjula Mobile World</h2>
-              <p class="loading-subtitle">Mobile Repair & Parts</p>
+              <h2>ஜிவி மொபைல்ஸ் — Jivi Mobiles</h2>
+              <p class="loading-subtitle">Laptop & Mobile Sales / Service</p>
               <div class="loading-progress">
                 <div class="progress-bar"></div>
               </div>
@@ -1550,9 +1573,9 @@ class ManjulaMobilesApp {
         return
     }
 
-    // Store order data temporarily (don't save to database yet)
+    // Store order data temporarily with a stable orderId (don't save to database yet)
     const cartTotal = this.cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
-    const orderId = Date.now()
+    const orderId = 'ORD-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5).toUpperCase();
     this.pendingOrder = {
       id: orderId,
       date: new Date().toISOString(), // Store as ISO string for proper date handling
@@ -1563,6 +1586,7 @@ class ManjulaMobilesApp {
         address: `${address}, ${city}, ${postalCode}`
       },
       items: this.cart.map(item => ({
+        id: item.id || item._id,
         name: item.name,
         quantity: item.quantity,
         price: item.price
@@ -1664,20 +1688,17 @@ class ManjulaMobilesApp {
         <div class="nav-content">
           <div class="nav-brand" style="cursor: pointer; display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; overflow: hidden;">
             <div class="nav-logo" style="flex-shrink: 0;">
-              <img src="https://i.pinimg.com/736x/e3/6f/79/e36f793e016dd6b35cd27f84030b7487.jpg" alt="Manjula Mobile World Logo" style="width: 50px; height: 50px; object-fit: contain; border-radius: 8px;" onerror="this.innerHTML='<div style=&quot;width:50px;height:50px;background:linear-gradient(135deg,#dc2626,#b91c1c);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;&quot;>📱</div>'">
+              <img src="logo.jpg?v=20260822" alt="Jivi Mobiles Logo" style="width: 50px; height: 50px; object-fit: contain; border-radius: 50%; box-shadow: 0 2px 10px rgba(0,0,0,0.15);" onerror="this.innerHTML='<div style=&quot;width:50px;height:50px;background:linear-gradient(135deg,#0284c7,#0369a1);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;&quot;>📱</div>'">
             </div>
             <div class="nav-title" data-page="home" style="min-width: 0; overflow: hidden;">
-              <div class="nav-shop-name" style="font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">MANJULA MOBILE WORLD</div>
-              <div class="nav-shop-sub" style="font-weight: 500; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">the final world of mobile solution</div>
+              <div class="nav-shop-name" style="font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">ஜிவி மொபைல்ஸ் — Jivi Mobiles</div>
+              <div class="nav-shop-sub" style="font-weight: 500; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Laptop & Mobile Sales / Service</div>
             </div>
           </div>
           
           <ul class="nav nav-pills">
             <li class="nav-item">
               <a class="nav-link ${currentPage === 'home' ? 'active' : ''}" data-page="home">Home</a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link ${currentPage === 'shop-location' ? 'active' : ''}" data-page="shop-location">Shop Location</a>
             </li>
             <li class="nav-item">
               <a class="nav-link ${currentPage === 'products' ? 'active' : ''}" data-page="products">Products</a>
@@ -1694,6 +1715,9 @@ class ManjulaMobilesApp {
             </li>
             <li class="nav-item">
               <a class="nav-link ${currentPage === 'about' ? 'active' : ''}" data-page="about">About</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link ${currentPage === 'shop-location' ? 'active' : ''}" data-page="shop-location">Shop Location</a>
             </li>
             <li class="nav-item">
               <a class="nav-link ${currentPage === 'join-with-us' ? 'active' : ''}" data-page="join-with-us">Join With Us</a>
@@ -1721,9 +1745,6 @@ class ManjulaMobilesApp {
             <a class="nav-link ${currentPage === 'home' ? 'active' : ''}" data-page="home">Home</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link ${currentPage === 'shop-location' ? 'active' : ''}" data-page="shop-location">Shop Location</a>
-          </li>
-          <li class="nav-item">
             <a class="nav-link ${currentPage === 'products' ? 'active' : ''}" data-page="products">Products</a>
           </li>
           <li class="nav-item">
@@ -1738,6 +1759,9 @@ class ManjulaMobilesApp {
           </li>
           <li class="nav-item">
             <a class="nav-link ${currentPage === 'about' ? 'active' : ''}" data-page="about">About</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link ${currentPage === 'shop-location' ? 'active' : ''}" data-page="shop-location">Shop Location</a>
           </li>
           <li class="nav-item">
             <a class="nav-link ${currentPage === 'join-with-us' ? 'active' : ''}" data-page="join-with-us">Join With Us</a>
@@ -2491,7 +2515,11 @@ class ManjulaMobilesApp {
 
 
   renderProductCard(product) {
-    const discountPercent = Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
+    const currPrice = Number(product.price) || 0;
+    const origPrice = Number(product.originalPrice) || currPrice;
+    const discountPercent = origPrice > 0 && origPrice > currPrice ? Math.round(((origPrice - currPrice) / origPrice) * 100) : 0;
+    const rating = product.rating || 4.5;
+    const reviewsCount = Number(product.reviews) || 0;
     
     // Get product ID (use _id if id doesn't exist)
     const productId = product.id || product._id || 'unknown';
@@ -2543,7 +2571,7 @@ class ManjulaMobilesApp {
       // Use default image
       imageGalleryHTML = `
         <div class="modern-product-image-wrapper">
-          <img src="./public/assets/images/1.jpg" alt="${product.name}" class="modern-product-image" style="width: 100%; height: 100%; object-fit: contain;">
+          <img src="./public/assets/images/1.png" alt="${product.name}" class="modern-product-image" style="width: 100%; height: 100%; object-fit: contain;">
         </div>
       `;
     }
@@ -2558,7 +2586,7 @@ class ManjulaMobilesApp {
           ${discountPercent > 0 ? `
             <div class="modern-discount-badge" style="background: ${discountBadgeColor};">
               <span class="discount-icon">⚡</span>
-              <span class="discount-text">${discountPercent}% - 25m - 17s</span>
+              <span class="discount-text">${discountPercent}% OFF</span>
             </div>
           ` : ''}
         </div>
@@ -2567,9 +2595,9 @@ class ManjulaMobilesApp {
           <h3 class="modern-product-title">${product.name}</h3>
           
           <div class="modern-price-section">
-            <span class="modern-current-price">₹${product.price.toLocaleString()}</span>
-            ${product.originalPrice > product.price ? `
-              <span class="modern-original-price">₹${product.originalPrice.toLocaleString()}</span>
+            <span class="modern-current-price">₹${currPrice.toLocaleString('en-IN')}</span>
+            ${origPrice > currPrice ? `
+              <span class="modern-original-price">₹${origPrice.toLocaleString('en-IN')}</span>
               <span class="modern-discount-percent">${discountPercent}% off</span>
             ` : ''}
           </div>
@@ -2577,8 +2605,8 @@ class ManjulaMobilesApp {
           <div class="modern-delivery-badge">Free Delivery</div>
           
           <div class="modern-rating-section">
-            <span class="modern-rating-badge">${product.rating}★</span>
-            <span class="modern-reviews-count">${product.reviews.toLocaleString()} Reviews</span>
+            <span class="modern-rating-badge">${rating}★</span>
+            <span class="modern-reviews-count">${reviewsCount.toLocaleString('en-IN')} Reviews</span>
           </div>
           
           <div class="modern-product-actions">
@@ -2967,7 +2995,7 @@ class ManjulaMobilesApp {
             <div style="background: #f3f4f6; border-radius: 12px; padding: 20px; margin-top: 32px; text-align: center;">
               <p style="font-weight: 600; margin-bottom: 8px; color: #000;">Need help?</p>
               <p style="color: #666; margin-bottom: 16px; font-size: 14px;">If you face any issues with the payment, contact us:</p>
-              <a href="https://wa.me/918248454841" target="_blank" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none; padding: 12px 24px;">
+              <a href="https://wa.me/918489062593" target="_blank" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none; padding: 12px 24px;">
                 📱 Chat on WhatsApp
               </a>
             </div>
@@ -2989,7 +3017,7 @@ class ManjulaMobilesApp {
 
     const whatsappMessage = `*New Order Request*%0A%0A*Customer Details:*%0AName: ${fullName}%0APhone: ${phone}%0AAddress: ${address}%0A%0A*Order Items:*%0A${orderItems}%0A%0A*Total Amount: ₹${cartTotal}*%0A%0APlease confirm this order and provide payment details.`;
 
-    const whatsappUrl = `https://wa.me/918248454841?text=${whatsappMessage}`;
+    const whatsappUrl = `https://wa.me/918489062593?text=${whatsappMessage}`;
     
     window.open(whatsappUrl, '_blank');
     
@@ -3037,25 +3065,48 @@ class ManjulaMobilesApp {
   }
 
   async processPayment(method) {
-    const fullName = document.getElementById("fullName").value;
-    const email = document.getElementById("email").value;
-    const phone = document.getElementById("phone").value;
-    const address = document.getElementById("address").value;
-    const city = document.getElementById("city").value;
-    const postalCode = document.getElementById("postalCode").value;
+    if (this.isSubmittingOrder) {
+      console.warn('⚠️ Order submission already in progress...');
+      return;
+    }
+    this.isSubmittingOrder = true;
+
+    const confirmBtn = document.getElementById('confirmOrderBtn') || document.getElementById('confirmFinalOrder');
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.dataset.originalText = confirmBtn.innerText;
+      confirmBtn.innerText = '⏳ Processing Order...';
+    }
+
+    const fullName = document.getElementById("fullName")?.value || "";
+    const email = document.getElementById("email")?.value || "";
+    const phone = document.getElementById("phone")?.value || "";
+    const address = document.getElementById("address")?.value || "";
+    const city = document.getElementById("city")?.value || "";
+    const postalCode = document.getElementById("postalCode")?.value || "";
     
     // Validate required fields
     if (!fullName || !phone || !address || !city) {
       alert("Please fill in all required fields");
+      this.isSubmittingOrder = false;
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = confirmBtn.dataset.originalText || '✅ Confirm Order';
+      }
       return;
     }
     
     const cartTotal = this.cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
     
+    // Use pendingOrder.id if present so orderId is stable across retries/clicks
+    const orderId = (this.pendingOrder && this.pendingOrder.id) 
+      ? String(this.pendingOrder.id) 
+      : 'ORD-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+
     // Create order object
     const order = {
-      id: Math.random().toString(36).substr(2, 9).toUpperCase(),
-      date: new Date().toLocaleDateString(),
+      id: orderId,
+      date: new Date().toISOString(),
       customer: {
         name: fullName,
         email: email,
@@ -3080,10 +3131,17 @@ class ManjulaMobilesApp {
       // Clear cart and go to home
       this.cart = [];
       this.saveCart();
+      this.pendingOrder = null;
       this.renderPage("home");
     } catch (error) {
       console.error('Error processing payment:', error);
       alert('There was an error processing your order. Please try again or contact us directly.');
+    } finally {
+      this.isSubmittingOrder = false;
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = confirmBtn.dataset.originalText || '✅ Confirm Order';
+      }
     }
   }
 
@@ -3295,7 +3353,7 @@ class ManjulaMobilesApp {
             </div>
             
             <p style="text-align: center; color: #666; font-size: 14px; margin-top: 24px; line-height: 1.6;">
-              By confirming, your order will be sent to Manjula Mobile World for processing.<br>
+              By confirming, your order will be sent to ஜிவி மொபைல்ஸ் — Jivi Mobiles for processing.<br>
               We will verify your payment and contact you shortly.
             </p>
           </div>
@@ -3347,7 +3405,7 @@ class ManjulaMobilesApp {
   }
 
   generatePaymentQRCode(amount) {
-    const upiPaymentUrl = `upi://pay?pa=${this.upiLink}&pn=ManjulaMobiles&am=${amount}&tr=ORDER-${Date.now()}&tn=Payment%20for%20Manjula%20Mobiles%20Order`;
+    const upiPaymentUrl = `upi://pay?pa=${this.upiLink}&pn=JiviMobiles&am=${amount}&tr=ORDER-${Date.now()}&tn=Payment%20for%20Jivi%20Mobiles%20Order`;
     
     const qrContainer = document.getElementById('paymentQrCode');
     if (qrContainer && typeof QRCode !== 'undefined') {
@@ -3372,8 +3430,8 @@ class ManjulaMobilesApp {
 
   openPaymentApp(appType, amount) {
     const upiId = this.upiLink;
-    const merchantName = "ManjulaMobiles";
-    const transactionNote = "Payment for Manjula Mobiles Order";
+    const merchantName = "JiviMobiles";
+    const transactionNote = "Payment for Jivi Mobiles Order";
     const transactionId = `ORDER-${Date.now()}`;
     
     let paymentUrl = '';
@@ -3434,6 +3492,19 @@ class ManjulaMobilesApp {
   }
 
   async finalizeOrderWithScreenshot(screenshotData, fileName) {
+    if (this.isSubmittingOrder) {
+      console.warn('⚠️ Order submission already in progress...');
+      return;
+    }
+    this.isSubmittingOrder = true;
+
+    const confirmBtn = document.getElementById('confirmOrderBtn') || document.getElementById('confirmFinalOrder');
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.dataset.originalText = confirmBtn.innerText;
+      confirmBtn.innerText = '⏳ Processing Order...';
+    }
+
     console.log('🔍 Processing order with screenshot:', {
       hasData: !!screenshotData,
       dataLength: screenshotData?.length,
@@ -3444,6 +3515,11 @@ class ManjulaMobilesApp {
     // Use the pending order data that was stored during proceedToPayment
     if (!this.pendingOrder) {
       alert("Order data not found. Please go back and fill the delivery information again.");
+      this.isSubmittingOrder = false;
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = confirmBtn.dataset.originalText || '✅ Confirm Order';
+      }
       this.renderPage("checkout");
       return;
     }
@@ -3451,13 +3527,23 @@ class ManjulaMobilesApp {
     // Validate screenshot data
     if (!screenshotData || !fileName) {
       alert("Screenshot data is missing. Please upload the screenshot again.");
+      this.isSubmittingOrder = false;
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = confirmBtn.dataset.originalText || '✅ Confirm Order';
+      }
       return;
     }
     
+    // Use pendingOrder.id if present so orderId is stable across retries/clicks
+    const orderId = (this.pendingOrder && this.pendingOrder.id)
+      ? String(this.pendingOrder.id)
+      : 'ORD-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+
     // Create order with actual screenshot data
     const order = {
-      id: Math.random().toString(36).substr(2, 9).toUpperCase(),
-      date: new Date().toLocaleDateString(),
+      id: orderId,
+      date: new Date().toISOString(),
       customer: this.pendingOrder.customer,
       items: this.pendingOrder.items,
       total: this.pendingOrder.total,
@@ -3489,7 +3575,7 @@ Status: Payment Verification Pending
 
 Your payment screenshot has been uploaded and saved. We will verify your payment and contact you shortly.
 
-Thank you for choosing Manjula Mobile World!`);
+Thank you for choosing ஜிவி மொபைல்ஸ் — Jivi Mobiles!`);
       
       // Clear cart and go to home
       this.cart = [];
@@ -3499,6 +3585,12 @@ Thank you for choosing Manjula Mobile World!`);
     } catch (error) {
       console.error('❌ Error processing order:', error);
       alert('Failed to place order. Error: ' + error.message + '\n\nPlease try again or contact support.');
+    } finally {
+      this.isSubmittingOrder = false;
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = confirmBtn.dataset.originalText || '✅ Confirm Order';
+      }
     }
   }
 
@@ -3517,56 +3609,114 @@ Thank you for choosing Manjula Mobile World!`);
 
   renderAbout() {
     return `
-      <div class="about-section">
-        <div class="container" style="padding-top: 96px; padding-bottom: 80px;">
-          <div class="about-grid">
-            <div class="about-content">
-              <div style="display: inline-block; padding: 8px 16px; background-color: rgba(30, 41, 59, 0.5); border: 1px solid rgba(251, 146, 60, 0.3); border-radius: 9999px; margin-bottom: 24px;">
-                <span style="color: #fb923c; font-size: 14px; font-weight: 500;">About Us</span>
-              </div>
-              <h1 style="font-size: 48px; font-weight: 700; margin-bottom: 24px; line-height: 1.2;">Manjula Mobile World</h1>
-              <p style="font-size: 18px; color: #94a3b8; margin-bottom: 24px; line-height: 1.6;">Your trusted mobile repair and parts center in Ramapuram, Tamil Nadu. We specialize in professional device repairs, genuine parts supply, and premium mobile accessories with expert technicians and 24/7 support.</p>
-              
-              <div style="margin-bottom: 32px;">
-                <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 16px;">Why Choose Us?</h3>
-                <ul style="list-style: none; display: flex; flex-direction: column; gap: 12px;">
-                  <li style="display: flex; align-items: center; gap: 12px;"><span style="color: #fb923c; font-weight: 700;">✓</span> <span>Expert technicians with ${this.getYearsOfExperience()}+ years experience</span></li>
-                  <li style="display: flex; align-items: center; gap: 12px;"><span style="color: #fb923c; font-weight: 700;">✓</span> <span>100% genuine spare parts and accessories</span></li>
-                  <li style="display: flex; align-items: center; gap: 12px;"><span style="color: #fb923c; font-weight: 700;">✓</span> <span>24-hour express service available</span></li>
-                  <li style="display: flex; align-items: center; gap: 12px;"><span style="color: #fb923c; font-weight: 700;">✓</span> <span>6-month warranty on all repairs</span></li>
-                  <li style="display: flex; align-items: center; gap: 12px;"><span style="color: #fb923c; font-weight: 700;">✓</span> <span>All major brands supported</span></li>
-                </ul>
+      <div class="about-section" style="background-color: #f8fafc; min-height: 100vh; padding-top: 96px; padding-bottom: 80px;">
+        <div class="container" style="max-width: 1280px; margin: 0 auto; padding: 0 24px;">
+          
+          <!-- Hero Badge & Title -->
+          <div style="text-align: center; max-width: 800px; margin: 0 auto 48px auto;">
+            <div style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 18px; background-color: #fef2f2; border: 1.5px solid #fecaca; border-radius: 9999px; margin-bottom: 16px;">
+              <span style="font-size: 14px;">📍</span>
+              <span style="color: #dc2626; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Vanthavasi's #1 Sales & Repair Hub</span>
+            </div>
+            <h1 style="font-size: 42px; font-weight: 800; color: #0f172a; margin-bottom: 16px; line-height: 1.2;">ஜிவி மொபைல்ஸ் — Jivi Mobiles</h1>
+            <p style="font-size: 17px; color: #475569; line-height: 1.7; font-weight: 500;">
+              Your trusted laptop & mobile sales and service center in Vanthavasi, Tamil Nadu. We specialize in genuine laptop sales, multi-brand mobile sales, chip-level device repairs, original spare parts, and premium accessories with 24/7 dedicated support.
+            </p>
+          </div>
+
+          <!-- Main 2-Column Grid -->
+          <div class="about-grid" style="display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 40px; align-items: start;">
+            
+            <!-- Left Column: Details & Features -->
+            <div>
+              <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); margin-bottom: 28px;">
+                <h3 style="font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                  <span>⭐</span> Why Choose Jivi Mobiles?
+                </h3>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                  <div style="background: #f8fafc; border: 1px solid #f1f5f9; padding: 16px; border-radius: 12px;">
+                    <div style="font-size: 22px; margin-bottom: 6px;">👨‍🔧</div>
+                    <div style="font-weight: 700; color: #0f172a; font-size: 14px; margin-bottom: 4px;">Expert Technicians</div>
+                    <div style="font-size: 12px; color: #64748b;">Over ${this.getYearsOfExperience()}+ years of chip-level repair mastery.</div>
+                  </div>
+
+                  <div style="background: #f8fafc; border: 1px solid #f1f5f9; padding: 16px; border-radius: 12px;">
+                    <div style="font-size: 22px; margin-bottom: 6px;">🛡️</div>
+                    <div style="font-weight: 700; color: #0f172a; font-size: 14px; margin-bottom: 4px;">6-Month Warranty</div>
+                    <div style="font-size: 12px; color: #64748b;">Complete peace of mind on all services & components.</div>
+                  </div>
+
+                  <div style="background: #f8fafc; border: 1px solid #f1f5f9; padding: 16px; border-radius: 12px;">
+                    <div style="font-size: 22px; margin-bottom: 6px;">⚡</div>
+                    <div style="font-weight: 700; color: #0f172a; font-size: 14px; margin-bottom: 4px;">24-Hour Express Repair</div>
+                    <div style="font-size: 12px; color: #64748b;">Fast turnaround for urgent screen & battery fixes.</div>
+                  </div>
+
+                  <div style="background: #f8fafc; border: 1px solid #f1f5f9; padding: 16px; border-radius: 12px;">
+                    <div style="font-size: 22px; margin-bottom: 6px;">💯</div>
+                    <div style="font-weight: 700; color: #0f172a; font-size: 14px; margin-bottom: 4px;">100% Original Parts</div>
+                    <div style="font-size: 12px; color: #64748b;">Direct OEM displays, spares, and batteries.</div>
+                  </div>
+                </div>
               </div>
 
-              <div style="display: flex; gap: 16px; margin-bottom: 32px;">
-                <button class="btn btn-primary" data-page="products">Shop Now</button>
-                <a href="https://maps.app.goo.gl/UEpa2L38EWea9JD67" target="_blank" class="btn btn-secondary" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">Visit Us</a>
-              </div>
+              <!-- Contact Info Box -->
+              <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 28px; box-shadow: 0 4px 20px rgba(0,0,0,0.05);">
+                <h3 style="font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 18px;">📞 Contact Information</h3>
+                <div style="display: flex; flex-direction: column; gap: 14px; font-size: 14px;">
+                  <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 18px;">📍</span>
+                    <div><strong style="color: #0f172a;">Location:</strong> <span style="color: #475569;">Vanthavasi, Tamil Nadu, India</span></div>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 18px;">📞</span>
+                    <div><strong style="color: #0f172a;">Phones:</strong> <a href="tel:+918489062593" style="color: #dc2626; font-weight: 700; text-decoration: none;">+91 84890 62593</a> / <a href="tel:+919629516788" style="color: #dc2626; font-weight: 700; text-decoration: none;">+91 96295 16788</a></div>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 18px;">✉️</span>
+                    <div><strong style="color: #0f172a;">Email:</strong> <a href="mailto:jivimobiles@gmail.com" style="color: #2563eb; font-weight: 600; text-decoration: none;">jivimobiles@gmail.com</a></div>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 18px;">🕐</span>
+                    <div><strong style="color: #0f172a;">Hours:</strong> <span style="color: #475569;">Mon - Sun: 9:00 AM - 10:00 PM (Emergency 24/7 Support)</span></div>
+                  </div>
+                </div>
 
-              <div class="contact-info" style="background-color: rgba(30, 41, 59, 0.5); border: 1px solid #334155; border-radius: 12px; padding: 24px; margin-bottom: 32px;">
-                <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">Get In Touch</h3>
-                <div style="display: flex; flex-direction: column; gap: 12px;">
-                  <p style="display: flex; align-items: center; gap: 12px;"><span style="font-size: 20px;">📍</span> <span><strong>Melmaruvathur, Vandavasi Rd, Ramapuram, Tamil Nadu 603201</strong></span></p>
-                  <p style="display: flex; align-items: center; gap: 12px;"><span style="font-size: 20px;">📞</span> <span style="color: #22d3ee;"><strong>+91 82484 54841</strong></span></p>
-                  <p style="display: flex; align-items: center; gap: 12px;"><span style="font-size: 20px;">✉️</span> <span style="color: #22d3ee;"><strong>info@manjulamobiles.com</strong></span></p>
-                  <p style="display: flex; align-items: center; gap: 12px;"><span style="font-size: 20px;">🕐</span> <span>Mon - Sun: 9:00 AM - 10:00 PM<br>Holidays: 10:00 AM - 8:00 PM</span></p>
+                <div style="display: flex; gap: 12px; margin-top: 24px;">
+                  <button class="btn btn-primary" data-page="products" style="flex: 1; padding: 12px; font-weight: 700; background: #dc2626; border: none; border-radius: 8px; color: white;">🛍️ Browse Products</button>
+                  <a href="https://maps.google.com/?q=Vanthavasi,+Tamil+Nadu" target="_blank" class="btn btn-secondary" style="flex: 1; padding: 12px; font-weight: 700; text-decoration: none; text-align: center; border-radius: 8px; background: #0f172a; color: white;">📍 View Map Location</a>
                 </div>
               </div>
             </div>
-            <div class="about-image">
-              <div class="shop-image-container">
-                <img src="https://i.pinimg.com/1200x/58/d0/5c/58d05c0184743b7e191e9cac3dfa19a9.jpg" alt="Mobile Repair Shop" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px; margin-bottom: 16px;">
-                <div style="background: linear-gradient(to bottom right, rgba(251, 146, 60, 0.2), rgba(239, 68, 68, 0.2)); padding: 32px; border-radius: 12px; text-align: center;">
-                  <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 12px;">Manjula Mobile World</h3>
-                  <p style="color: #94a3b8; font-size: 14px; margin-bottom: 16px;">Professional Mobile Repair & Parts Center - Ramapuram</p>
-                  <div style="display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;">
-                    <span style="background-color: rgba(251, 146, 60, 0.2); padding: 6px 12px; border-radius: 20px; font-size: 12px; color: #fb923c;">Expert Service</span>
-                    <span style="background-color: rgba(251, 146, 60, 0.2); padding: 6px 12px; border-radius: 20px; font-size: 12px; color: #fb923c;">Genuine Parts</span>
-                    <span style="background-color: rgba(251, 146, 60, 0.2); padding: 6px 12px; border-radius: 20px; font-size: 12px; color: #fb923c;">24/7 Support</span>
+
+            <!-- Right Column: Shop Showcase Image & Stats -->
+            <div>
+              <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 6px 24px rgba(0,0,0,0.08);">
+                <img src="https://i.pinimg.com/1200x/58/d0/5c/58d05c0184743b7e191e9cac3dfa19a9.jpg" alt="Jivi Mobiles Shop" style="width: 100%; height: 260px; object-fit: cover; border-bottom: 1px solid #e2e8f0;">
+                
+                <div style="padding: 28px; text-align: center;">
+                  <h3 style="font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 6px;">ஜிவி மொபைல்ஸ் — Jivi Mobiles Management</h3>
+                  <p style="color: #64748b; font-size: 13px; margin-bottom: 20px;">Premium Laptops &amp; Mobile Sales &amp; Repair Destination</p>
+                  
+                  <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #f1f5f9;">
+                    <div>
+                      <div style="font-size: 22px; font-weight: 900; color: #dc2626;">5000+</div>
+                      <div style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">Repairs Done</div>
+                    </div>
+                    <div>
+                      <div style="font-size: 22px; font-weight: 900; color: #16a34a;">10+</div>
+                      <div style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">Years Exp.</div>
+                    </div>
+                    <div>
+                      <div style="font-size: 22px; font-weight: 900; color: #2563eb;">100%</div>
+                      <div style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">Genuine</div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+
           </div>
         </div>
       </div>
@@ -3579,15 +3729,15 @@ Thank you for choosing Manjula Mobile World!`);
         <div class="container">
           <div style="margin-bottom: 48px; text-align: center;">
             <h1 style="font-size: 48px; font-weight: 700; margin-bottom: 8px;">Visit Our Shop</h1>
-            <p style="color: #000000ff; font-size: 18px;">Manjula Mobile World Service Center - Ramapuram, Tamil Nadu</p>
+            <p style="color: #000000ff; font-size: 18px;">ஜிவி மொபைல்ஸ் — Jivi Mobiles Service Center - Vanthavasi, Tamil Nadu</p>
           </div>
 
           <!-- Map + Contact side by side -->
           <div class="shop-location-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: stretch; max-width: 1200px; margin: 0 auto;">
             
             <!-- Map Section -->
-            <div class="shop-map-block" style="background-color: rgba(30, 41, 59, 0.5); border: 1px solid #e01123ff; border-radius: 12px; overflow: hidden; min-height: 450px; position: relative; cursor: pointer;" onclick="window.open('https://maps.app.goo.gl/UEpa2L38EWea9JD67', '_blank')">
-              <iframe src="https://www.google.com/maps/embed?pb=!1m28!1m12!1m3!1d1332.6836960168596!2d79.7577830285442!3d12.468113512373563!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!4m13!3e6!4m5!1s0x3a5319fc59689b47%3A0x9c923c48fdc1fb6b!2sMelmaruvathur!3m2!1d12.4268234!2d79.82995919999999!4m5!1s0x3a531020aa862667%3A0xe25d880e8f98bf09!2sVandavasi%20Rd%2C%20Ramapuram%2C%20Tamil%20Nadu%20603201!3m2!1d12.4451387!2d79.81148309999999!5e1!3m2!1sen!2sin!4v1762845054152!5m2!1sen!2sin" width="100%" height="100%" style="border:0; pointer-events: none; min-height: 450px;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+            <div class="shop-map-block" style="background-color: rgba(30, 41, 59, 0.5); border: 1px solid #e01123ff; border-radius: 12px; overflow: hidden; min-height: 450px; position: relative; cursor: pointer;" onclick="window.open('https://maps.google.com/?q=Vanthavasi,+Tamil+Nadu', '_blank')">
+              <iframe src="https://maps.google.com/maps?q=Vanthavasi,+Tamil+Nadu&t=&z=15&ie=UTF8&iwloc=&output=embed" width="100%" height="100%" style="border:0; pointer-events: none; min-height: 450px;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
             </div>
 
             <!-- Contact Information - Side of Map -->
@@ -3596,17 +3746,17 @@ Thank you for choosing Manjula Mobile World!`);
               
               <div>
                 <div style="color: #dc2626; font-weight: 600; margin-bottom: 8px; font-size: 15px;">📍 Address</div>
-                <p style="color: #000000ff; line-height: 1.6; margin: 0;">Melmaruvathur, Vandavasi Rd,<br>Ramapuram, Tamil Nadu 603201, India</p>
+                <p style="color: #000000ff; line-height: 1.6; margin: 0;">Vanthavasi, Tamil Nadu, India</p>
               </div>
 
               <div>
                 <div style="color: #dc2626; font-weight: 600; margin-bottom: 8px; font-size: 15px;">📞 Phone</div>
-                <a href="tel:+918248454841" style="color: #16a34a; text-decoration: none; font-weight: 600; font-size: 18px;">+91 82484 54841</a>
+                <a href="tel:+918489062593" style="color: #16a34a; text-decoration: none; font-weight: 600; font-size: 18px;">+91 84890 62593</a> / <a href="tel:+919629516788" style="color: #16a34a; text-decoration: none; font-weight: 600; font-size: 18px;">+91 96295 16788</a>
               </div>
 
               <div>
                 <div style="color: #dc2626; font-weight: 600; margin-bottom: 8px; font-size: 15px;">✉️ Email</div>
-                <a href="mailto:manjulamobiles125@gmail.com" style="color: #16a34a; text-decoration: none; font-weight: 500;">manjulamobiles125@gmail.com</a>
+                <a href="mailto:jivimobiles@gmail.com" style="color: #16a34a; text-decoration: none; font-weight: 500;">jivimobiles@gmail.com</a>
               </div>
 
               <div>
@@ -3616,7 +3766,7 @@ Thank you for choosing Manjula Mobile World!`);
                 <p style="color: #16a34a; margin: 8px 0; font-weight: 700;">24/7 Emergency Service</p>
               </div>
 
-              <a href="https://maps.app.goo.gl/UEpa2L38EWea9JD67" target="_blank" style="display: inline-block; background: linear-gradient(to right, #dc2626, #b91c1c); color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; text-align: center; margin-top: 8px;">
+              <a href="https://maps.google.com/?q=Vanthavasi,+Tamil+Nadu" target="_blank" style="display: inline-block; background: linear-gradient(to right, #dc2626, #b91c1c); color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; text-align: center; margin-top: 8px;">
                 📍 Get Directions
               </a>
             </div>
@@ -4102,7 +4252,7 @@ Thank you for choosing Manjula Mobile World!`);
               </div>
               <h3>WhatsApp</h3>
               <p>Chat with us directly on WhatsApp for quick queries, service bookings, and support</p>
-              <a href="https://wa.me/918248454841" target="_blank" class="btn btn-primary" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+              <a href="https://wa.me/918489062593" target="_blank" class="btn btn-primary" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
                 <span>Message Us</span>
                 <span>→</span>
               </a>
@@ -4130,14 +4280,14 @@ Thank you for choosing Manjula Mobile World!`);
             <h3>24/7 WhatsApp Support</h3>
             <p>Our expert technicians are available round the clock to assist you with any mobile repair issues. Get instant support, service booking, and technical guidance.</p>
             
-            <a href="https://wa.me/918248454841" target="_blank" class="whatsapp-button">
+            <a href="https://wa.me/918489062593" target="_blank" class="whatsapp-button">
               <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" alt="WhatsApp" style="width: 24px; height: 24px; object-fit: contain; margin-right: 8px;">
               <span>Chat on WhatsApp</span>
             </a>
             
             <div style="margin-top: 32px; padding: 16px; background-color: #fef2f2; border-radius: 8px;">
               <p style="margin: 0; font-size: 14px; color: #374151;">
-                <strong>Direct WhatsApp Number:</strong> +91 82484 54841<br>
+                <strong>Direct WhatsApp Numbers:</strong> +91 84890 62593 / +91 96295 16788<br>
                 <strong>Available:</strong> 24/7 for emergency services
               </p>
             </div>
@@ -4170,22 +4320,21 @@ Thank you for choosing Manjula Mobile World!`);
           <div class="footer-section">
             <h4>Contact</h4>
             <ul>
-              <li><a href="mailto:manjulamobiles125@gmail.com">manjulamobiles125@gmail.com</a></li>
-              <li><a href="tel:+918248454841">+91 82484 54841</a></li>
+              <li><a href="mailto:jivimobiles@gmail.com">jivimobiles@gmail.com</a></li>
+              <li><a href="tel:+918489062593">+91 84890 62593 / +91 96295 16788</a></li>
               <li>Available 24/7</li>
             </ul>
           </div>
           <div class="footer-section">
             <h4>Follow Us</h4>
             <ul>
-              <li><a href="https://www.instagram.com/manjula_mobile_world?igsh=MW5yOW5rdXk3NWx2dw== " target="_blank">Instagram</a></li>
-              <li><a href="https://wa.me/8248454841" target="_blank">WhatsApp</a></li>
+              <li><a href="https://wa.me/918489062593" target="_blank">WhatsApp</a></li>
               <li><a href="#" data-page="join-with-us">Join With Us</a></li>
             </ul>
           </div>
         </div>
         <div class="footer-bottom">
-          <p>&copy; 2025 Manjula Mobile World. All rights reserved. | Powered by Advanced Mobile Solutions</p>
+          <p>&copy; 2025 ஜிவி மொபைல்ஸ் — Jivi Mobiles. All rights reserved. | Laptop & Mobile Sales / Service</p>
           <!-- Hidden owner portal link - only visible when you know about it -->
           <p style="font-size: 10px; color: #374151; margin-top: 8px;">
             <a href="owner.html" style="color: #6b7280; text-decoration: none;">Admin</a>
@@ -4224,8 +4373,8 @@ Thank you for choosing Manjula Mobile World!`);
             </div>
             <button class="btn btn-primary" style="width: 100%;" data-action="track-order">🔍 Check Status</button>
             
-            <div style="margin-top: 16px; padding: 12px; background-color: rgba(236, 37, 37, 1); border-radius: 8px;">
-              <p style="font-size: 12px; color: #030303ff; margin: 0;">
+            <div style="margin-top: 16px; padding: 12px; background-color: #fff7ed; border: 1.5px solid #f59e0b; border-radius: 8px;">
+              <p style="font-size: 12px; color: #78350f; margin: 0; font-weight: 600;">
                 💡 <strong>Note:</strong> Get your QR ID and Password from the service center when you submit your device for repair.
               </p>
             </div>
@@ -4233,46 +4382,46 @@ Thank you for choosing Manjula Mobile World!`);
           <div id="trackResult" style="display: none;">
             <div class="tracking-result">
               <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
-                <div style="width: 12px; height: 12px; background-color: #22d3ee; border-radius: 50%; animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;"></div>
-                <span style="color: #22d3ee; font-weight: 600; font-size: 14px;">Repair Status Found</span>
+                <div style="width: 12px; height: 12px; background-color: #0284c7; border-radius: 50%; animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;"></div>
+                <span style="color: #0284c7; font-weight: 900; font-size: 15px;">Repair Status Found</span>
               </div>
               
               <!-- Compact Info Grid -->
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; margin-bottom: 16px; background: #f8fafc; padding: 12px; border-radius: 8px;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; margin-bottom: 16px; background: #f8fafc; border: 1.5px solid #cbd5e1; padding: 12px; border-radius: 8px;">
                 <div>
-                  <p style="color: #64748b; font-size: 11px; margin-bottom: 2px;">QR ID</p>
-                  <p style="font-size: 14px; font-weight: 600;" id="resultOrderId"></p>
+                  <p style="color: #0f172a; font-size: 11.5px; margin-bottom: 2px; font-weight: 900;">QR ID</p>
+                  <p style="font-size: 14.5px; font-weight: 900; color: #0f172a;" id="resultOrderId"></p>
                 </div>
                 <div>
-                  <p style="color: #64748b; font-size: 11px; margin-bottom: 2px;">Customer</p>
-                  <p style="font-size: 14px; font-weight: 600;" id="resultCustomer"></p>
+                  <p style="color: #0f172a; font-size: 11.5px; margin-bottom: 2px; font-weight: 900;">Customer</p>
+                  <p style="font-size: 14.5px; font-weight: 900; color: #0f172a;" id="resultCustomer"></p>
                 </div>
                 <div>
-                  <p style="color: #64748b; font-size: 11px; margin-bottom: 2px;">Device</p>
-                  <p style="font-size: 14px; font-weight: 600;" id="resultDevice"></p>
+                  <p style="color: #0f172a; font-size: 11.5px; margin-bottom: 2px; font-weight: 900;">Device</p>
+                  <p style="font-size: 14.5px; font-weight: 900; color: #0f172a;" id="resultDevice"></p>
                 </div>
                 <div>
-                  <p style="color: #64748b; font-size: 11px; margin-bottom: 2px;">Est. Completion</p>
-                  <p style="font-size: 14px; font-weight: 600;" id="resultEstDays"></p>
+                  <p style="color: #0f172a; font-size: 11.5px; margin-bottom: 2px; font-weight: 900;">Est. Completion</p>
+                  <p style="font-size: 14.5px; font-weight: 900; color: #0f172a;" id="resultEstDays"></p>
                 </div>
               </div>
               
               <!-- Issue Description -->
-              <div style="margin-bottom: 16px; background: #fef3c7; padding: 10px; border-radius: 8px; border-left: 3px solid #f59e0b;">
-                <p style="color: #92400e; font-size: 11px; margin-bottom: 2px; font-weight: 600;">Issue Description</p>
-                <p style="font-size: 13px; font-weight: 500; line-height: 1.3; color: #78350f;" id="resultIssue"></p>
+              <div style="margin-bottom: 16px; background: #fef3c7; padding: 10px; border-radius: 8px; border-left: 4px solid #d97706;">
+                <p style="color: #78350f; font-size: 12px; margin-bottom: 2px; font-weight: 900;">Issue Description</p>
+                <p style="font-size: 13.5px; font-weight: 800; line-height: 1.4; color: #451a03;" id="resultIssue"></p>
               </div>
               
               <!-- Timeline Container -->
               <div style="margin-bottom: 16px;">
-                <p style="color: #64748b; font-size: 12px; margin-bottom: 12px; font-weight: 600;">Repair Progress</p>
+                <p style="color: #0f172a; font-size: 14px; margin-bottom: 12px; font-weight: 900;">Repair Progress</p>
                 <div id="trackingTimeline"></div>
               </div>
               
               <!-- Last Updated -->
-              <div style="text-align: center; padding: 8px; background: #f1f5f9; border-radius: 6px;">
-                <p style="color: #64748b; font-size: 10px; margin-bottom: 2px;">Last Updated</p>
-                <p style="font-size: 12px; font-weight: 600; color: #475569;" id="resultLastUpdated"></p>
+              <div style="text-align: center; padding: 8px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px;">
+                <p style="color: #0f172a; font-size: 11px; margin-bottom: 2px; font-weight: 900;">Last Updated</p>
+                <p style="font-size: 12.5px; font-weight: 900; color: #0f172a;" id="resultLastUpdated"></p>
               </div>
             </div>
           </div>
@@ -4532,7 +4681,7 @@ Thank you for choosing Manjula Mobile World!`);
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Order #${order.id} - Manjula Mobiles</title>
+        <title>Order #${order.id} - Jivi Mobiles</title>
         <style>
           body {
             font-family: Arial, sans-serif;
@@ -4619,10 +4768,10 @@ Thank you for choosing Manjula Mobile World!`);
       </head>
       <body>
         <div class="header">
-          <h1>📱 MANJULA MOBILE WORLD</h1>
-          <p>The Final World of Mobile Solution</p>
-          <p>📍 Ramapuram, Tamil Nadu | 📞 +91 82484 54841</p>
-          <p>✉️ manjulamobiles125@gmail.com</p>
+          <h1>💻📱 ஜிவி மொபைல்ஸ் — JIVI MOBILES</h1>
+          <p>Laptop & Mobile Sales / Service</p>
+          <p>📍 Vanthavasi, Tamil Nadu | 📞 +91 84890 62593 / +91 96295 16788</p>
+          <p>✉️ jivimobiles@gmail.com</p>
         </div>
 
         <div class="section">
@@ -4687,7 +4836,7 @@ Thank you for choosing Manjula Mobile World!`);
 
         <div class="footer">
           <p>Thank you for your business!</p>
-          <p>For any queries, please contact us at +91 82484 54841</p>
+          <p>For any queries, please contact us at +91 84890 62593 / +91 96295 16788</p>
         </div>
 
         <script>
@@ -4745,7 +4894,7 @@ if (document.readyState === 'loading') {
 
 function initApp() {
   try {
-    console.log('🚀 Initializing Manjula Mobile World App...');
+    console.log('🚀 Initializing ஜிவி மொபைல்ஸ் — Jivi Mobiles App...');
     const app = new ManjulaMobilesApp();
     window.app = app; // Make app globally accessible for debugging
     console.log('✅ App initialized successfully');
