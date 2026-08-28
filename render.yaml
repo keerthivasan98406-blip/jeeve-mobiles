@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: manjula-mobiles
+    name: jeeve-mobiles
     env: node
     plan: free
     branch: main
