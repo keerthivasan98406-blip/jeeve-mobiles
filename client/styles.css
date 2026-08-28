@@ -1893,6 +1893,8 @@ nav .nav-content {
     padding: 20px 24px 30px 24px;
     background: #ffffff;
     overflow: hidden;
+    position: relative;
+    z-index: 1;
 }
 
 .services-grid {
