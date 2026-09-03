@@ -133,7 +133,7 @@ class OwnerPortalApp {
       } else {
         this.products.push(product);
       }
-      localStorage.setItem('manjula_products', JSON.stringify(this.products));
+      // NOTE: Do NOT write to localStorage here — that would persist stale stock values
       this.renderPage(this.currentPage);
     });
 
@@ -909,7 +909,7 @@ class OwnerPortalApp {
           alert(`✅ Distributor "${name}" saved successfully!`);
           document.getElementById(modalId)?.remove();
           await this.loadDistributorsFromStorage();
-          this.renderPage(this.currentPage);
+          this.renderPage(this.currentPage === 'admin-distributors' ? 'admin-dealers' : this.currentPage);
         } else {
           alert('❌ Failed to save distributor.');
         }
@@ -930,7 +930,7 @@ class OwnerPortalApp {
       });
       if (res.ok) {
         await this.loadDistributorsFromStorage();
-        this.renderPage(this.currentPage);
+        this.renderPage(this.currentPage === 'admin-distributors' ? 'admin-dealers' : this.currentPage);
       }
     } catch (err) {
       console.error('❌ Error toggling distributor status:', err);
@@ -948,7 +948,7 @@ class OwnerPortalApp {
       if (res.ok) {
         alert(`✅ Distributor "${distributorName}" deleted successfully!`);
         await this.loadDistributorsFromStorage();
-        this.renderPage('admin-distributors');
+        this.renderPage('admin-dealers');
       } else {
         const err = await res.json();
         alert(`❌ Failed to delete distributor: ${err.error || 'Server error'}`);
@@ -1209,6 +1209,211 @@ class OwnerPortalApp {
     }
   }
 
+  openPurchaseDetailModal(stockId) {
+    const entry = (this.stockEntries || []).find(e => e.stockId === stockId || e.barcode === stockId);
+    if (!entry) {
+      alert('Purchase entry details not found.');
+      return;
+    }
+    const dist = (this.distributors || []).find(d => d.distributorId === entry.dealerId || d.name === entry.dealerName);
+    const modalId = 'purchaseDetailModal';
+    document.getElementById(modalId)?.remove();
+
+    const unitPrice = Number(entry.purchasePrice) || 0;
+    const initialQty = Number(entry.initialQuantity) || 0;
+    const grandTotal = unitPrice * initialQty;
+
+    const html = `
+      <div id="${modalId}" style="position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 10000; padding: 16px;">
+        <div style="background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 16px; max-width: 680px; width: 100%; padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.7); max-height: 90vh; overflow-y: auto;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #334155; padding-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 26px;">🧾</span>
+              <div>
+                <h3 style="font-size: 20px; font-weight: 800; color: #38bdf8; margin: 0;">Dealer Purchase Invoice Details</h3>
+                <span style="font-size: 12px; color: #94a3b8;">Batch ID: ${entry.stockId}</span>
+              </div>
+            </div>
+            <button onclick="document.getElementById('${modalId}').remove()" style="background: none; border: none; color: #94a3b8; font-size: 22px; cursor: pointer;">✕</button>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; background: #1e293b; padding: 16px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 16px; font-size: 13px;">
+            <div>
+              <div style="color: #94a3b8; font-size: 11px; font-weight: 700; text-transform: uppercase;">Distributor / Supplier</div>
+              <div style="font-size: 16px; font-weight: 800; color: #38bdf8; margin-top: 2px;">${entry.dealerName || dist?.name || 'Direct Purchase'}</div>
+              <div style="color: #cbd5e1; font-size: 12px; margin-top: 4px;">📞 ${dist?.phone || 'N/A'} · ${dist?.address || 'Local'}</div>
+              ${dist?.gstNumber ? `<div style="color: #94a3b8; font-size: 11px; margin-top: 2px;">GST: ${dist.gstNumber}</div>` : ''}
+            </div>
+
+            <div>
+              <div style="color: #94a3b8; font-size: 11px; font-weight: 700; text-transform: uppercase;">Invoice Metadata</div>
+              <div style="color: #fff; font-weight: 700; margin-top: 2px;">Invoice #: <span style="color: #f59e0b;">${entry.notes?.match(/Inv:\s*([^\s\)]+)/)?.[1] || 'INV-DIRECT'}</span></div>
+              <div style="color: #cbd5e1; font-size: 12px; margin-top: 4px;">Purchase Date: <strong>${entry.purchaseDate || entry.createdAt?.split('T')[0]}</strong></div>
+              <div style="color: #cbd5e1; font-size: 12px; margin-top: 2px;">Status: <span style="color: #34d399; font-weight: 800;">${entry.status || 'In Stock'}</span></div>
+            </div>
+          </div>
+
+          <div style="background: #1e293b; border-radius: 12px; border: 1px solid #334155; overflow: hidden; margin-bottom: 16px;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: left;">
+              <thead>
+                <tr style="background: #0f172a; color: #94a3b8; text-transform: uppercase; font-size: 11px;">
+                  <th style="padding: 10px 14px;">Product Name</th>
+                  <th style="padding: 10px 14px;">Barcode / Tracking</th>
+                  <th style="padding: 10px 14px; text-align: center;">Qty Purchased</th>
+                  <th style="padding: 10px 14px; text-align: right;">Unit Cost</th>
+                  <th style="padding: 10px 14px; text-align: right;">Total Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style="border-top: 1px solid #334155;">
+                  <td style="padding: 12px 14px; font-weight: 800; color: #fff;">${entry.masterName}</td>
+                  <td style="padding: 12px 14px; font-weight: 700; color: #7c3aed;">${entry.barcode}${entry.imei1 ? ` (IMEI: ${entry.imei1})` : ''}</td>
+                  <td style="padding: 12px 14px; text-align: center; font-weight: 800;">${initialQty}</td>
+                  <td style="padding: 12px 14px; text-align: right; font-weight: 800; color: #fb7185;">₹${unitPrice.toLocaleString('en-IN')}</td>
+                  <td style="padding: 12px 14px; text-align: right; font-weight: 900; color: #34d399;">₹${grandTotal.toLocaleString('en-IN')}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid #059669; border-radius: 10px; padding: 12px; margin-bottom: 20px; font-size: 12px; color: #a7f3d0;">
+            🔒 <strong>Audit Record Protection:</strong> Initial Purchased Quantity (${initialQty} units) is permanently preserved in history logs. Current available unsold stock is <strong>${entry.currentQuantity}</strong> units.
+          </div>
+
+          <div style="display: flex; gap: 12px; justify-content: flex-end;">
+            <button onclick="document.getElementById('${modalId}').remove()" style="padding: 10px 18px; background: #334155; color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">Close</button>
+            <button onclick="app.printDealerPurchaseBill('${entry.stockId}')" style="padding: 10px 20px; background: #0284c7; color: #fff; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+              🖨️ Print A4 Invoice Bill
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  printDealerPurchaseBill(stockId) {
+    const entry = (this.stockEntries || []).find(e => e.stockId === stockId || e.barcode === stockId);
+    if (!entry) {
+      alert('Purchase entry not found for printing.');
+      return;
+    }
+    const dist = (this.distributors || []).find(d => d.distributorId === entry.dealerId || d.name === entry.dealerName);
+    const unitPrice = Number(entry.purchasePrice) || 0;
+    const initialQty = Number(entry.initialQuantity) || 0;
+    const grandTotal = unitPrice * initialQty;
+    const invNum = entry.notes?.match(/Inv:\s*([^\s\)]+)/)?.[1] || `INV-${entry.stockId.substring(4, 12)}`;
+
+    const printWin = window.open('', '_blank', 'width=900,height=750');
+    if (!printWin) {
+      alert('Please allow popups to print the purchase invoice bill.');
+      return;
+    }
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Dealer Purchase Invoice - ${invNum}</title>
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 24px; color: #1e293b; background: #fff; margin: 0; }
+          .invoice-box { max-width: 800px; margin: auto; padding: 30px; border: 2px solid #e2e8f0; border-radius: 12px; }
+          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #dc2626; padding-bottom: 16px; margin-bottom: 24px; }
+          .company-name { font-size: 24px; font-weight: 900; color: #dc2626; text-transform: uppercase; }
+          .bill-title { font-size: 18px; font-weight: 800; color: #0f172a; text-align: right; }
+          .details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; font-size: 13px; }
+          .card { background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #cbd5e1; }
+          .table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px; }
+          .table th { background: #1e293b; color: #fff; padding: 10px 12px; text-transform: uppercase; font-size: 11px; text-align: left; }
+          .table td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
+          .total-box { text-align: right; font-size: 16px; font-weight: 900; color: #059669; margin-top: 12px; padding: 12px; background: #ecfdf5; border-radius: 8px; border: 1px solid #a7f3d0; }
+          .footer { margin-top: 40px; padding-top: 16px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; font-size: 11px; color: #64748b; }
+          @media print {
+            body { padding: 0; }
+            .invoice-box { border: none; padding: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="invoice-box">
+          <div class="header">
+            <div>
+              <div class="company-name">ஜிவி மொபைல்ஸ் — Jivi Mobiles</div>
+              <div style="font-size: 12px; color: #64748b;">Mobile Sales, Services &amp; Accessories</div>
+            </div>
+            <div>
+              <div class="bill-title">DEALER PURCHASE BILL</div>
+              <div style="font-size: 12px; color: #64748b;">Invoice #: <strong>${invNum}</strong></div>
+              <div style="font-size: 12px; color: #64748b;">Date: <strong>${entry.purchaseDate || entry.createdAt?.split('T')[0]}</strong></div>
+            </div>
+          </div>
+
+          <div class="details-grid">
+            <div class="card">
+              <strong style="color: #0284c7; text-transform: uppercase; font-size: 11px;">Distributor / Supplier Details</strong>
+              <div style="font-size: 15px; font-weight: 800; margin-top: 4px;">${entry.dealerName || dist?.name || 'Direct Purchase'}</div>
+              <div>Phone: ${dist?.phone || 'N/A'}</div>
+              <div>Address: ${dist?.address || 'Local Market'}</div>
+              ${dist?.gstNumber ? `<div>GST No: ${dist.gstNumber}</div>` : ''}
+            </div>
+
+            <div class="card">
+              <strong style="color: #0284c7; text-transform: uppercase; font-size: 11px;">Stock Batch Info</strong>
+              <div style="margin-top: 4px;">Batch ID: <strong>${entry.stockId}</strong></div>
+              <div>Barcode: <strong>${entry.barcode}</strong></div>
+              <div>Tracking Mode: <strong>${entry.imei1 ? 'Unit Serial / IMEI' : 'Bulk Batch'}</strong></div>
+              <div>Status: <strong>${entry.status || 'In Stock'}</strong></div>
+            </div>
+          </div>
+
+          <table class="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Product Description</th>
+                <th>Barcode / IMEI</th>
+                <th style="text-align: center;">Qty</th>
+                <th style="text-align: right;">Cost Price (₹)</th>
+                <th style="text-align: right;">Line Total (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1</td>
+                <td><strong>${entry.masterName}</strong></td>
+                <td>${entry.barcode}${entry.imei1 ? `<br><small>IMEI: ${entry.imei1}</small>` : ''}</td>
+                <td style="text-align: center;"><strong>${initialQty}</strong></td>
+                <td style="text-align: right;">₹${unitPrice.toLocaleString('en-IN')}</td>
+                <td style="text-align: right;"><strong>₹${grandTotal.toLocaleString('en-IN')}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="total-box">
+            Grand Total Investment: ₹${grandTotal.toLocaleString('en-IN')}
+          </div>
+
+          <div style="margin-top: 20px; font-size: 11px; color: #64748b;">
+            * Note: Historical purchase logs permanently record original purchased quantity of ${initialQty} units.
+          </div>
+
+          <div class="footer">
+            <div>Generated by Jivi Mobiles Owner Portal</div>
+            <div>Authorized Signature: _______________________</div>
+          </div>
+        </div>
+        <script>
+          window.onload = function() { window.print(); };
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWin.document.write(html);
+    printWin.document.close();
+  }
+
   renderDistributorsModule() {
     const search = (this.distributorSearch || '').toLowerCase().trim();
     let list = this.distributors || [];
@@ -1425,9 +1630,15 @@ class OwnerPortalApp {
                       <td style="padding: 14px 16px; text-align: center; font-weight: 800;">${e.initialQuantity || 0}</td>
                       <td style="padding: 14px 16px; text-align: center; font-weight: 800; color: ${e.currentQuantity > 0 ? '#059669' : '#dc2626'};">${e.currentQuantity || 0}</td>
                       <td style="padding: 14px 16px; text-align: right; font-weight: 800; color: #059669;">₹${((Number(e.purchasePrice) || 0) * (Number(e.initialQuantity) || 0)).toLocaleString('en-IN')}</td>
-                      <td style="padding: 14px 16px; text-align: center;">
-                        <button onclick="app.printStockBarcodeSticker('${e.barcode}')" style="padding: 6px 12px; background: #0284c7; color: #fff; border: none; border-radius: 6px; font-weight: 800; font-size: 11px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
-                          🖨️ Print Label
+                      <td style="padding: 14px 16px; text-align: center; white-space: nowrap;">
+                        <button onclick="app.openPurchaseDetailModal('${e.stockId}')" style="padding: 6px 10px; background: #3b82f6; color: #fff; border: none; border-radius: 6px; font-weight: 800; font-size: 11px; cursor: pointer; margin-right: 4px;">
+                          👁️ View
+                        </button>
+                        <button onclick="app.printDealerPurchaseBill('${e.stockId}')" style="padding: 6px 10px; background: #059669; color: #fff; border: none; border-radius: 6px; font-weight: 800; font-size: 11px; cursor: pointer; margin-right: 4px;">
+                          🖨️ Bill
+                        </button>
+                        <button onclick="app.printStockBarcodeSticker('${e.barcode}')" style="padding: 6px 10px; background: #0284c7; color: #fff; border: none; border-radius: 6px; font-weight: 800; font-size: 11px; cursor: pointer;">
+                          🏷️ Label
                         </button>
                       </td>
                     </tr>
@@ -1436,6 +1647,578 @@ class OwnerPortalApp {
               </table>
             </div>
           </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ===== DEALERS PAGE (admin-dealers) =====
+  renderDealersPage() {
+    const search = (this.distributorSearch || '').toLowerCase().trim();
+    let list = this.distributors || [];
+
+    if (this.distributorStatusFilter === 'active') {
+      list = list.filter(d => d.status !== 'Inactive');
+    } else if (this.distributorStatusFilter === 'inactive') {
+      list = list.filter(d => d.status === 'Inactive');
+    }
+
+    if (search) {
+      list = list.filter(d =>
+        (d.name || '').toLowerCase().includes(search) ||
+        (d.code || '').toLowerCase().includes(search) ||
+        (d.phone || '').includes(search) ||
+        (d.contactPerson || '').toLowerCase().includes(search)
+      );
+    }
+
+    return `
+      <div style="min-height: 100vh; background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 50%, #f0f9ff 100%); color: #0f172a; padding-top: 96px; padding-bottom: 80px;">
+        <div class="container" style="max-width: 1300px; margin: 0 auto; padding: 0 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
+            <div>
+              <button class="back-button" data-page="admin" style="margin-bottom: 12px;">← Dashboard</button>
+              <h1 style="font-size: 36px; font-weight: 800; color: #0f172a; margin: 0;">🏪 Dealer Management</h1>
+              <p style="color: #475569; font-size: 14px; margin-top: 4px;">Manage suppliers, contact info, and track active dealer partnerships.</p>
+            </div>
+            <button onclick="app.openDistributorModal()" style="background: #059669; color: #fff; border: none; padding: 12px 20px; border-radius: 8px; font-weight: 800; font-size: 14px; cursor: pointer;">
+              ➕ Add New Dealer
+            </button>
+          </div>
+
+          <div style="background: #fff; border: 1px solid #cbd5e1; border-radius: 14px; padding: 18px; margin-bottom: 24px; box-shadow: 0 4px 16px rgba(0,0,0,0.06);">
+            <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: center; justify-content: space-between;">
+              <input type="text" value="${this.distributorSearch || ''}"
+                oninput="app.distributorSearch = this.value; app.renderPage('admin-dealers');"
+                placeholder="🔍 Search dealer name, code, contact person, phone..."
+                style="flex: 1; min-width: 280px; padding: 12px 16px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; color: #111; font-size: 14px;">
+              <div style="display: flex; gap: 8px;">
+                <button onclick="app.distributorStatusFilter='all'; app.renderPage('admin-dealers');" style="padding: 8px 16px; border-radius: 6px; font-weight: 700; border: none; cursor: pointer; background: ${this.distributorStatusFilter === 'all' ? '#1e293b' : '#e2e8f0'}; color: ${this.distributorStatusFilter === 'all' ? '#fff' : '#334155'};">All (${this.distributors.length})</button>
+                <button onclick="app.distributorStatusFilter='active'; app.renderPage('admin-dealers');" style="padding: 8px 16px; border-radius: 6px; font-weight: 700; border: none; cursor: pointer; background: ${this.distributorStatusFilter === 'active' ? '#059669' : '#e2e8f0'}; color: ${this.distributorStatusFilter === 'active' ? '#fff' : '#334155'};">🟢 Active (${this.distributors.filter(d => d.status !== 'Inactive').length})</button>
+                <button onclick="app.distributorStatusFilter='inactive'; app.renderPage('admin-dealers');" style="padding: 8px 16px; border-radius: 6px; font-weight: 700; border: none; cursor: pointer; background: ${this.distributorStatusFilter === 'inactive' ? '#dc2626' : '#e2e8f0'}; color: ${this.distributorStatusFilter === 'inactive' ? '#fff' : '#334155'};">🔴 Inactive (${this.distributors.filter(d => d.status === 'Inactive').length})</button>
+              </div>
+            </div>
+          </div>
+
+          <div style="background: #fff; border: 1px solid #cbd5e1; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06);">
+            <div style="overflow-x: auto;">
+              <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
+                <thead>
+                  <tr style="background: #1e293b; color: #fff; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">
+                    <th style="padding: 14px 16px;">#</th>
+                    <th style="padding: 14px 16px;">Dealer Name</th>
+                    <th style="padding: 14px 16px;">Code</th>
+                    <th style="padding: 14px 16px;">Contact Person</th>
+                    <th style="padding: 14px 16px;">Phone</th>
+                    <th style="padding: 14px 16px;">GST / Address</th>
+                    <th style="padding: 14px 16px; text-align: center;">Status</th>
+                    <th style="padding: 14px 16px; text-align: center;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${list.length === 0 ? `
+                    <tr>
+                      <td colspan="8" style="padding: 40px; text-align: center; color: #64748b; font-size: 15px;">
+                        🔍 No dealers found. Click <strong>+ Add New Dealer</strong> to create one.
+                      </td>
+                    </tr>
+                  ` : list.sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((d, idx) => `
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                      <td style="padding: 14px 16px; font-weight: 700; color: #64748b;">${idx + 1}</td>
+                      <td style="padding: 14px 16px; font-weight: 800; color: #0f172a; font-size: 14px;">${d.name}</td>
+                      <td style="padding: 14px 16px; font-weight: 700; color: #0284c7;">${d.code || 'N/A'}</td>
+                      <td style="padding: 14px 16px; color: #334155;">${d.contactPerson || '-'}</td>
+                      <td style="padding: 14px 16px; font-weight: 700; color: #059669;">📞 ${d.phone}</td>
+                      <td style="padding: 14px 16px; color: #64748b; font-size: 12px;">${d.gstNumber ? `GST: ${d.gstNumber} · ` : ''}${d.address || 'Local'}</td>
+                      <td style="padding: 14px 16px; text-align: center;">
+                        <span style="padding: 4px 10px; border-radius: 12px; font-weight: 800; font-size: 11px; background: ${d.status === 'Inactive' ? '#fee2e2' : '#dcfce7'}; color: ${d.status === 'Inactive' ? '#dc2626' : '#15803d'};">
+                          ${d.status || 'Active'}
+                        </span>
+                      </td>
+                      <td style="padding: 14px 16px; text-align: center; white-space: nowrap;">
+                        <button onclick="app.openDistributorModal(app.distributors.find(x => x.distributorId === '${d.distributorId}'))" style="padding: 5px 12px; background: #0284c7; color: #fff; border: none; border-radius: 6px; font-weight: 700; font-size: 11px; cursor: pointer; margin-right: 4px;">✏️ Edit</button>
+                        <button onclick="app.toggleDistributorStatus('${d.distributorId}', '${d.status || 'Active'}')" style="padding: 5px 12px; background: ${d.status === 'Inactive' ? '#059669' : '#d97706'}; color: #fff; border: none; border-radius: 6px; font-weight: 700; font-size: 11px; cursor: pointer; margin-right: 4px;">${d.status === 'Inactive' ? 'Activate' : 'Deactivate'}</button>
+                        <button onclick="app.deleteDealerWithGuard('${d.distributorId}', '${(d.name || '').replace(/'/g, "\\'")}')" style="padding: 5px 12px; background: #dc2626; color: #fff; border: none; border-radius: 6px; font-weight: 700; font-size: 11px; cursor: pointer;">🗑️ Delete</button>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  async deleteDealerWithGuard(distributorId, dealerName) {
+    try {
+      // Check for existing stock entries before deleting
+      const res = await fetch(`${this.API_URL}/stock-entries?dealerId=${encodeURIComponent(distributorId)}`);
+      let hasHistory = false;
+      if (res.ok) {
+        const entries = await res.json();
+        hasHistory = Array.isArray(entries) && entries.length > 0;
+      }
+      const warningMsg = hasHistory
+        ? `⚠️ Dealer "${dealerName}" has ${res.ok ? (await fetch(`${this.API_URL}/stock-entries?dealerId=${encodeURIComponent(distributorId)}`).then(r => r.json()).then(e => e.length).catch(() => 'some')) : 'existing'} purchase record(s).\n\nDeleting this dealer will orphan those purchase history records.\n\nAre you sure you want to proceed?`
+        : `Are you sure you want to delete dealer "${dealerName}"?\n\nThis action cannot be undone.`;
+      if (!confirm(warningMsg)) return;
+    } catch (err) {
+      if (!confirm(`Are you sure you want to delete dealer "${dealerName}"?\n\nThis action cannot be undone.`)) return;
+    }
+    try {
+      const delRes = await fetch(`${this.API_URL}/distributors/${distributorId}`, { method: 'DELETE' });
+      if (delRes.ok) {
+        alert(`✅ Dealer "${dealerName}" deleted successfully!`);
+        await this.loadDistributorsFromStorage();
+        this.renderPage('admin-dealers');
+      } else {
+        const err = await delRes.json();
+        alert(`❌ Failed to delete dealer: ${err.error || 'Server error'}`);
+      }
+    } catch (err) {
+      alert('❌ Error deleting dealer. Please check your connection.');
+    }
+  }
+
+  // ===== DEALER PURCHASE ENTRY PAGE (admin-dealer-purchase) =====
+  renderDealerPurchasePage() {
+    const today = new Date().toISOString().split('T')[0];
+    const activeDistributors = (this.distributors || []).filter(d => d.status !== 'Inactive');
+    return `
+      <div style="min-height: 100vh; background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 50%, #f0f9ff 100%); color: #0f172a; padding-top: 96px; padding-bottom: 80px;">
+        <div class="container" style="max-width: 780px; margin: 0 auto; padding: 0 16px;">
+          <div style="margin-bottom: 24px;">
+            <button class="back-button" data-page="admin" style="margin-bottom: 12px;">← Dashboard</button>
+            <h1 style="font-size: 32px; font-weight: 800; color: #0f172a; margin: 0;">📥 Dealer Purchase Entry</h1>
+            <p style="color: #475569; font-size: 14px; margin-top: 4px;">Record new inventory purchase batch from a dealer.</p>
+          </div>
+
+          <div id="dealerPurchaseSuccessBanner" style="display:none; background:#dcfce7; border:1px solid #059669; border-radius:10px; padding:16px; margin-bottom:20px; font-size:14px; font-weight:700; color:#15803d;"></div>
+          <div id="dealerPurchaseErrorBanner" style="display:none; background:#fee2e2; border:1px solid #dc2626; border-radius:10px; padding:16px; margin-bottom:20px; font-size:14px; font-weight:700; color:#dc2626;"></div>
+
+          <div style="background:#fff; border:1px solid #cbd5e1; border-radius:16px; padding:28px; box-shadow:0 4px 16px rgba(0,0,0,0.06);">
+            <form id="dealerPurchaseForm" onsubmit="event.preventDefault(); app.saveDealerPurchaseEntry();" style="display:flex; flex-direction:column; gap:16px;">
+
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                <div>
+                  <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Select Product *</label>
+                  <select id="dpProductId" onchange="app.onDealerPurchaseProductChange()" style="width:100%; padding:11px 12px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; color:#111; font-weight:700;">
+                    <option value="">-- Choose Product --</option>
+                    ${(this.products || []).map(p => `<option value="${p._id || p.id}">${p.name} (${p.category || ''}) — Stock: ${p.stock || 0}</option>`).join('')}
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Select Dealer *</label>
+                  <select id="dpDealerId" onchange="app.onDealerPurchaseProductChange()" style="width:100%; padding:11px 12px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; color:#111; font-weight:700;">
+                    <option value="">-- Choose Dealer --</option>
+                    ${activeDistributors.map(d => `<option value="${d.distributorId}">${d.name} (${d.code || 'Dealer'})</option>`).join('')}
+                    <option value="">Direct / Local Market</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Auto-Generated Barcode</label>
+                <input type="text" id="dpBarcode" readonly style="width:100%; padding:10px 12px; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:8px; color:#7c3aed; font-weight:800; font-family:monospace;">
+                <span style="font-size:11px; color:#64748b;">Generated from product name + dealer code + timestamp. Regenerated on duplicate.</span>
+              </div>
+
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                <div>
+                  <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Purchase Date *</label>
+                  <input type="date" id="dpDate" value="${today}" style="width:100%; padding:10px 12px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; color:#111;">
+                </div>
+                <div>
+                  <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Quantity Purchased * (≥1)</label>
+                  <input type="number" id="dpQty" min="1" placeholder="10" style="width:100%; padding:10px 12px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; color:#111; font-weight:800;">
+                  <div id="dpQtyError" style="color:#dc2626; font-size:11px; font-weight:700; display:none; margin-top:3px;">Quantity must be at least 1</div>
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;">
+                <div>
+                  <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Purchase Price / Unit (₹) *</label>
+                  <input type="number" id="dpPurchasePrice" min="0" placeholder="15000" style="width:100%; padding:10px 12px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; color:#fb7185; font-weight:800;">
+                </div>
+                <div>
+                  <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">MRP (₹)</label>
+                  <input type="number" id="dpMrp" min="0" placeholder="18000" style="width:100%; padding:10px 12px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; color:#111;">
+                </div>
+                <div>
+                  <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Selling Price (₹)</label>
+                  <input type="number" id="dpSellingPrice" min="0" placeholder="16999" style="width:100%; padding:10px 12px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; color:#059669; font-weight:800;">
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;">
+                <div>
+                  <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">IMEI 1</label>
+                  <input type="text" id="dpImei1" placeholder="IMEI 1 (optional)" style="width:100%; padding:10px 12px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; color:#111;">
+                </div>
+                <div>
+                  <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">IMEI 2</label>
+                  <input type="text" id="dpImei2" placeholder="IMEI 2 (optional)" style="width:100%; padding:10px 12px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; color:#111;">
+                </div>
+                <div>
+                  <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Serial Number</label>
+                  <input type="text" id="dpSerial" placeholder="Serial (optional)" style="width:100%; padding:10px 12px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; color:#111;">
+                </div>
+              </div>
+
+              <div>
+                <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Notes</label>
+                <input type="text" id="dpNotes" placeholder="e.g. Batch #1, supplier warranty included" style="width:100%; padding:10px 12px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; color:#111;">
+              </div>
+
+              <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:8px;">
+                <button type="button" onclick="app.renderPage('admin')" style="padding:12px 20px; background:#334155; color:#fff; border:none; border-radius:8px; font-weight:700; cursor:pointer;">Cancel</button>
+                <button type="submit" style="padding:12px 28px; background:linear-gradient(135deg,#10b981,#059669); color:#fff; border:none; border-radius:8px; font-weight:900; font-size:15px; cursor:pointer;">📥 Save Purchase &amp; Increase Stock</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  generateDealerPurchaseBarcode(suffix = 0) {
+    const pId = document.getElementById('dpProductId')?.value;
+    const dId = document.getElementById('dpDealerId')?.value;
+    const product = (this.products || []).find(p => String(p._id || p.id) === String(pId));
+    const dealer = (this.distributors || []).find(d => d.distributorId === dId);
+    const pCode = (product?.name || 'PROD').replace(/[^a-zA-Z0-9]/g, '').substring(0, 6).toUpperCase();
+    const dCode = (dealer?.code || dealer?.name || 'D').replace(/[^a-zA-Z0-9]/g, '').substring(0, 4).toUpperCase();
+    const ts = (Date.now() % 10000) + suffix;
+    return `PROD-${pCode}-${dCode}-${ts}`;
+  }
+
+  onDealerPurchaseProductChange() {
+    const barcodeEl = document.getElementById('dpBarcode');
+    if (barcodeEl) {
+      barcodeEl.value = this.generateDealerPurchaseBarcode(0);
+    }
+  }
+
+  async saveDealerPurchaseEntry(retryCount = 0) {
+    const productId = document.getElementById('dpProductId')?.value;
+    const dealerId = document.getElementById('dpDealerId')?.value;
+    const qty = Number(document.getElementById('dpQty')?.value || 0);
+    const purchasePrice = Number(document.getElementById('dpPurchasePrice')?.value || 0);
+    const mrp = Number(document.getElementById('dpMrp')?.value || 0);
+    const sellingPrice = Number(document.getElementById('dpSellingPrice')?.value || 0);
+    const purchaseDate = document.getElementById('dpDate')?.value;
+    const imei1 = document.getElementById('dpImei1')?.value?.trim();
+    const imei2 = document.getElementById('dpImei2')?.value?.trim();
+    const serialNumber = document.getElementById('dpSerial')?.value?.trim();
+    const notes = document.getElementById('dpNotes')?.value?.trim();
+    let barcode = document.getElementById('dpBarcode')?.value?.trim();
+
+    // Validate quantity
+    const qtyErrEl = document.getElementById('dpQtyError');
+    if (qty < 1) {
+      if (qtyErrEl) qtyErrEl.style.display = 'block';
+      return;
+    }
+    if (qtyErrEl) qtyErrEl.style.display = 'none';
+
+    if (!productId) { alert('Please select a product.'); return; }
+
+    const product = (this.products || []).find(p => String(p._id || p.id) === String(productId));
+    const dealer = (this.distributors || []).find(d => d.distributorId === dealerId);
+
+    if (retryCount > 0) {
+      // Regenerate barcode on retry
+      barcode = this.generateDealerPurchaseBarcode(retryCount * 1000 + Math.floor(Math.random() * 999));
+      const barcodeEl = document.getElementById('dpBarcode');
+      if (barcodeEl) barcodeEl.value = barcode;
+    }
+
+    const payload = {
+      productId,
+      masterId: product?._id?.toString() || product?.id || productId,
+      masterName: product?.name || '',
+      distributorId: dealerId || '',
+      dealerId: dealerId || '',
+      dealerName: dealer?.name || 'Direct Purchase',
+      purchaseDate,
+      quantity: qty,
+      initialQuantity: qty,
+      purchasePrice,
+      mrp,
+      sellingPrice,
+      barcode,
+      imei1,
+      imei2,
+      serialNumber,
+      notes,
+      moduleType: 'Product'
+    };
+
+    try {
+      const res = await fetch(`${this.API_URL}/purchases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        // Show success banner
+        const successBanner = document.getElementById('dealerPurchaseSuccessBanner');
+        if (successBanner) {
+          successBanner.style.display = 'block';
+          successBanner.innerHTML = `✅ Purchase saved! ${qty} unit(s) of <strong>${product?.name || ''}</strong> added to stock.<br>
+            <button onclick="app.printStockBarcodeSticker('${barcode}')" style="margin-top:8px; padding:8px 16px; background:#059669; color:#fff; border:none; border-radius:6px; font-weight:800; cursor:pointer;">🏷️ Print Barcode Label</button>`;
+        }
+        const errBanner = document.getElementById('dealerPurchaseErrorBanner');
+        if (errBanner) errBanner.style.display = 'none';
+        // Clear form
+        document.getElementById('dealerPurchaseForm')?.reset();
+        const barcodeEl = document.getElementById('dpBarcode');
+        if (barcodeEl) barcodeEl.value = '';
+        // Reload data
+        await Promise.all([
+          this.loadProductsFromStorage(),
+          this.loadStockEntriesFromStorage()
+        ]);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        const isDuplicate = res.status === 409 || (err.error || '').toLowerCase().includes('duplicate');
+        if (isDuplicate && retryCount < 3) {
+          return this.saveDealerPurchaseEntry(retryCount + 1);
+        }
+        if (retryCount >= 3) {
+          const errBanner = document.getElementById('dealerPurchaseErrorBanner');
+          if (errBanner) { errBanner.style.display = 'block'; errBanner.textContent = '❌ Failed to generate a unique barcode after 3 attempts. Please try again.'; }
+        } else {
+          const errBanner = document.getElementById('dealerPurchaseErrorBanner');
+          if (errBanner) { errBanner.style.display = 'block'; errBanner.textContent = `❌ Failed: ${err.error || 'Unknown error'}`; }
+        }
+      }
+    } catch (err) {
+      const errBanner = document.getElementById('dealerPurchaseErrorBanner');
+      if (errBanner) { errBanner.style.display = 'block'; errBanner.textContent = '❌ Network error. Please check your connection.'; }
+    }
+  }
+
+  // ===== PURCHASE HISTORY PAGE (admin-purchase-history) =====
+  renderPurchaseHistoryPage() {
+    const search = (this.purchaseSearch || '').toLowerCase().trim();
+    let entries = (this.stockEntries || []).slice().sort((a, b) => {
+      const da = a.purchaseDate || a.createdAt || '';
+      const db = b.purchaseDate || b.createdAt || '';
+      return db.localeCompare(da);
+    });
+
+    if (this.purchaseDistributorFilter && this.purchaseDistributorFilter !== 'all') {
+      entries = entries.filter(e => e.dealerId === this.purchaseDistributorFilter);
+    }
+    if (search) {
+      entries = entries.filter(e =>
+        (e.masterName || '').toLowerCase().includes(search) ||
+        (e.dealerName || '').toLowerCase().includes(search) ||
+        (e.barcode || '').toLowerCase().includes(search)
+      );
+    }
+
+    return `
+      <div style="min-height: 100vh; background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 50%, #f0f9ff 100%); color: #0f172a; padding-top: 96px; padding-bottom: 80px;">
+        <div class="container" style="max-width: 1300px; margin: 0 auto; padding: 0 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
+            <div>
+              <button class="back-button" data-page="admin" style="margin-bottom: 12px;">← Dashboard</button>
+              <h1 style="font-size: 36px; font-weight: 800; color: #0f172a; margin: 0;">📋 Purchase History</h1>
+              <p style="color: #475569; font-size: 14px; margin-top: 4px;">All stock purchase batches from dealers. Initial quantity is permanently preserved.</p>
+            </div>
+            <button data-page="admin-dealer-purchase" style="background:#059669; color:#fff; border:none; padding:12px 20px; border-radius:8px; font-weight:800; font-size:14px; cursor:pointer;">➕ New Purchase</button>
+          </div>
+
+          <div style="background:#fff; border:1px solid #cbd5e1; border-radius:14px; padding:18px; margin-bottom:24px; box-shadow:0 4px 16px rgba(0,0,0,0.06);">
+            <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+              <input type="text" value="${this.purchaseSearch || ''}"
+                oninput="app.purchaseSearch = this.value; app.renderPage('admin-purchase-history');"
+                placeholder="🔍 Search product name, dealer, barcode..."
+                style="flex:1; min-width:280px; padding:12px 16px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; color:#111; font-size:14px;">
+              <select onchange="app.purchaseDistributorFilter = this.value; app.renderPage('admin-purchase-history');" style="padding:12px 16px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; color:#111; font-weight:700;">
+                <option value="all">All Dealers</option>
+                ${(this.distributors || []).map(d => `<option value="${d.distributorId}" ${this.purchaseDistributorFilter === d.distributorId ? 'selected' : ''}>${d.name}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+
+          ${entries.length === 0 ? `
+            <div style="background:#fff; border:1px solid #cbd5e1; border-radius:14px; padding:40px; text-align:center; color:#64748b; font-size:15px;">
+              📭 No purchase records found. <a data-page="admin-dealer-purchase" style="color:#0284c7; cursor:pointer; font-weight:700;">Add a new purchase →</a>
+            </div>
+          ` : `
+          <div style="background:#fff; border:1px solid #cbd5e1; border-radius:14px; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,0.06);">
+            <div style="overflow-x:auto;">
+              <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
+                <thead>
+                  <tr style="background:#1e293b; color:#fff; text-transform:uppercase; font-size:11px; letter-spacing:0.5px;">
+                    <th style="padding:12px 14px;">Barcode</th>
+                    <th style="padding:12px 14px;">Product Name</th>
+                    <th style="padding:12px 14px;">Dealer</th>
+                    <th style="padding:12px 14px;">Purchase Date</th>
+                    <th style="padding:12px 14px; text-align:center;">Initial Qty</th>
+                    <th style="padding:12px 14px; text-align:center;">Current Qty</th>
+                    <th style="padding:12px 14px; text-align:right;">Purchase Price</th>
+                    <th style="padding:12px 14px; text-align:center;">Status</th>
+                    <th style="padding:12px 14px; text-align:center;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${entries.map(e => `
+                    <tr style="border-bottom:1px solid #e2e8f0; cursor:pointer;" onclick="app.openPurchaseDetailModal('${e.stockId || e.barcode}')">
+                      <td style="padding:12px 14px; font-weight:800; color:#7c3aed; font-family:monospace;">${e.barcode}</td>
+                      <td style="padding:12px 14px; font-weight:700; color:#0f172a;">${e.masterName}</td>
+                      <td style="padding:12px 14px; color:#0284c7; font-weight:600;">${e.dealerName || 'Direct'}</td>
+                      <td style="padding:12px 14px; color:#475569;">${e.purchaseDate || e.createdAt?.split('T')[0] || '-'}</td>
+                      <td style="padding:12px 14px; text-align:center; font-weight:800; color:#059669;">${e.initialQuantity}</td>
+                      <td style="padding:12px 14px; text-align:center; font-weight:800; color:${Number(e.currentQuantity) === 0 ? '#dc2626' : '#0f172a'};">${e.currentQuantity}</td>
+                      <td style="padding:12px 14px; text-align:right; font-weight:700; color:#475569;">₹${(Number(e.purchasePrice) || 0).toLocaleString('en-IN')}</td>
+                      <td style="padding:12px 14px; text-align:center;">
+                        <span style="padding:4px 10px; border-radius:12px; font-weight:800; font-size:11px; background:${Number(e.currentQuantity) === 0 ? '#fee2e2' : '#dcfce7'}; color:${Number(e.currentQuantity) === 0 ? '#dc2626' : '#15803d'};">
+                          ${e.status || (Number(e.currentQuantity) === 0 ? 'Out of Stock' : 'In Stock')}
+                        </span>
+                      </td>
+                      <td style="padding:12px 14px; text-align:center; white-space:nowrap;" onclick="event.stopPropagation()">
+                        <button onclick="app.openPurchaseDetailModal('${e.stockId || e.barcode}')" style="padding:5px 10px; background:#1e293b; color:#fff; border:none; border-radius:6px; font-weight:700; font-size:11px; cursor:pointer; margin-right:4px;">🧾 Bill</button>
+                        <button onclick="app.printStockBarcodeSticker('${e.barcode}')" style="padding:5px 10px; background:#0284c7; color:#fff; border:none; border-radius:6px; font-weight:800; font-size:11px; cursor:pointer;">🏷️ Label</button>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          `}
+        </div>
+      </div>
+    `;
+  }
+
+  // ===== STOCK INVENTORY PAGE (admin-stock-inventory) =====
+  renderStockInventoryPage() {
+    const search = (this.fullStockSearch || '').toLowerCase().trim();
+    const statusFilter = this.fullStockStatusFilter || 'all';
+
+    let products = (this.products || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+    const getStatus = (p) => {
+      const stock = Number(p.stock) || 0;
+      const minStock = Number(p.minStock) || 5;
+      if (stock === 0) return 'out';
+      if (stock <= minStock) return 'low';
+      return 'in';
+    };
+
+    if (statusFilter !== 'all') {
+      products = products.filter(p => getStatus(p) === statusFilter);
+    }
+
+    if (search) {
+      products = products.filter(p =>
+        (p.name || '').toLowerCase().includes(search) ||
+        (p.category || '').toLowerCase().includes(search)
+      );
+    }
+
+    const allProducts = this.products || [];
+    const totalCount = allProducts.length;
+    const inStockCount = allProducts.filter(p => getStatus(p) === 'in').length;
+    const lowStockCount = allProducts.filter(p => getStatus(p) === 'low').length;
+    const outStockCount = allProducts.filter(p => getStatus(p) === 'out').length;
+
+    const statusBadge = (p) => {
+      const s = getStatus(p);
+      if (s === 'out') return `<span style="padding:4px 10px; border-radius:12px; font-weight:800; font-size:11px; background:#fee2e2; color:#dc2626;">Out of Stock</span>`;
+      if (s === 'low') return `<span style="padding:4px 10px; border-radius:12px; font-weight:800; font-size:11px; background:#fef3c7; color:#d97706;">Low Stock</span>`;
+      return `<span style="padding:4px 10px; border-radius:12px; font-weight:800; font-size:11px; background:#dcfce7; color:#15803d;">In Stock</span>`;
+    };
+
+    return `
+      <div style="min-height:100vh; background:linear-gradient(135deg,#e0f2fe 0%,#bae6fd 50%,#f0f9ff 100%); color:#0f172a; padding-top:96px; padding-bottom:80px;">
+        <div class="container" style="max-width:1300px; margin:0 auto; padding:0 16px;">
+          <div style="margin-bottom:24px;">
+            <button class="back-button" data-page="admin" style="margin-bottom:12px;">← Dashboard</button>
+            <h1 style="font-size:36px; font-weight:800; color:#0f172a; margin:0;">📦 Stock Inventory</h1>
+            <p style="color:#475569; font-size:14px; margin-top:4px;">All master products with current stock levels and status indicators.</p>
+          </div>
+
+          <!-- Summary Row -->
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:14px; margin-bottom:24px;">
+            <div style="background:#fff; border:1.5px solid #cbd5e1; border-radius:14px; padding:18px; text-align:center; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+              <div style="font-size:28px; font-weight:900; color:#0284c7;">${totalCount}</div>
+              <div style="color:#475569; font-size:12px; font-weight:800; text-transform:uppercase;">Total Products</div>
+            </div>
+            <div style="background:#fff; border:1.5px solid #cbd5e1; border-radius:14px; padding:18px; text-align:center; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+              <div style="font-size:28px; font-weight:900; color:#15803d;">${inStockCount}</div>
+              <div style="color:#475569; font-size:12px; font-weight:800; text-transform:uppercase;">In Stock</div>
+            </div>
+            <div style="background:#fff; border:1.5px solid #cbd5e1; border-radius:14px; padding:18px; text-align:center; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+              <div style="font-size:28px; font-weight:900; color:#d97706;">${lowStockCount}</div>
+              <div style="color:#475569; font-size:12px; font-weight:800; text-transform:uppercase;">Low Stock</div>
+            </div>
+            <div style="background:#fff; border:1.5px solid #cbd5e1; border-radius:14px; padding:18px; text-align:center; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+              <div style="font-size:28px; font-weight:900; color:#dc2626;">${outStockCount}</div>
+              <div style="color:#475569; font-size:12px; font-weight:800; text-transform:uppercase;">Out of Stock</div>
+            </div>
+          </div>
+
+          <!-- Filters -->
+          <div style="background:#fff; border:1px solid #cbd5e1; border-radius:14px; padding:18px; margin-bottom:24px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+            <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+              <input type="text" value="${this.fullStockSearch || ''}"
+                oninput="app.fullStockSearch = this.value; app.renderPage('admin-stock-inventory');"
+                placeholder="🔍 Search product name or category..."
+                style="flex:1; min-width:260px; padding:12px 16px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; color:#111; font-size:14px;">
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button onclick="app.fullStockStatusFilter='all'; app.renderPage('admin-stock-inventory');" style="padding:8px 16px; border-radius:6px; font-weight:700; border:none; cursor:pointer; background:${statusFilter === 'all' ? '#1e293b' : '#e2e8f0'}; color:${statusFilter === 'all' ? '#fff' : '#334155'};">All (${totalCount})</button>
+                <button onclick="app.fullStockStatusFilter='in'; app.renderPage('admin-stock-inventory');" style="padding:8px 16px; border-radius:6px; font-weight:700; border:none; cursor:pointer; background:${statusFilter === 'in' ? '#059669' : '#e2e8f0'}; color:${statusFilter === 'in' ? '#fff' : '#334155'};">🟢 In Stock (${inStockCount})</button>
+                <button onclick="app.fullStockStatusFilter='low'; app.renderPage('admin-stock-inventory');" style="padding:8px 16px; border-radius:6px; font-weight:700; border:none; cursor:pointer; background:${statusFilter === 'low' ? '#d97706' : '#e2e8f0'}; color:${statusFilter === 'low' ? '#fff' : '#334155'};">🟡 Low Stock (${lowStockCount})</button>
+                <button onclick="app.fullStockStatusFilter='out'; app.renderPage('admin-stock-inventory');" style="padding:8px 16px; border-radius:6px; font-weight:700; border:none; cursor:pointer; background:${statusFilter === 'out' ? '#dc2626' : '#e2e8f0'}; color:${statusFilter === 'out' ? '#fff' : '#334155'};">🔴 Out of Stock (${outStockCount})</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Table -->
+          ${products.length === 0 ? `
+            <div style="background:#fff; border:1px solid #cbd5e1; border-radius:14px; padding:40px; text-align:center; color:#64748b; font-size:15px;">
+              📭 No products match your filter.
+            </div>
+          ` : `
+          <div style="background:#fff; border:1px solid #cbd5e1; border-radius:14px; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,0.06);">
+            <div style="overflow-x:auto;">
+              <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
+                <thead>
+                  <tr style="background:#1e293b; color:#fff; text-transform:uppercase; font-size:11px; letter-spacing:0.5px;">
+                    <th style="padding:12px 14px;">#</th>
+                    <th style="padding:12px 14px;">Product Name</th>
+                    <th style="padding:12px 14px;">Category</th>
+                    <th style="padding:12px 14px; text-align:center;">Current Stock</th>
+                    <th style="padding:12px 14px; text-align:center;">Min Stock Threshold</th>
+                    <th style="padding:12px 14px; text-align:center;">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${products.map((p, idx) => `
+                    <tr style="border-bottom:1px solid #e2e8f0;">
+                      <td style="padding:12px 14px; color:#64748b; font-weight:700;">${idx + 1}</td>
+                      <td style="padding:12px 14px; font-weight:800; color:#0f172a;">${p.name}</td>
+                      <td style="padding:12px 14px; color:#475569;">${p.category || '-'}</td>
+                      <td style="padding:12px 14px; text-align:center; font-weight:900; font-size:16px; color:${Number(p.stock) === 0 ? '#dc2626' : '#0f172a'};">${Number(p.stock) || 0}</td>
+                      <td style="padding:12px 14px; text-align:center; color:#64748b;">${Number(p.minStock) || 5}</td>
+                      <td style="padding:12px 14px; text-align:center;">${statusBadge(p)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          `}
         </div>
       </div>
     `;
@@ -2260,17 +3043,33 @@ class OwnerPortalApp {
     } else if (page === "admin-spare-parts") {
       html += this.renderSpareParts()
     } else if (page === "admin-full-stock") {
-      html += this.renderFullStockInventory()
+      // Legacy redirect → admin-stock-inventory
+      this.currentPage = "admin-stock-inventory"
+      html += this.renderStockInventoryPage()
+    } else if (page === "admin-distributors") {
+      // Legacy redirect → admin-dealers
+      this.currentPage = "admin-dealers"
+      html += this.renderDealersPage()
+    } else if (page === "admin-purchases") {
+      // Legacy redirect → admin-purchase-history
+      this.currentPage = "admin-purchase-history"
+      html += this.renderPurchaseHistoryPage()
+    } else if (page === "admin-reports") {
+      // Legacy redirect → admin-purchase-history
+      this.currentPage = "admin-purchase-history"
+      html += this.renderPurchaseHistoryPage()
+    } else if (page === "admin-dealers") {
+      html += this.renderDealersPage()
+    } else if (page === "admin-dealer-purchase") {
+      html += this.renderDealerPurchasePage()
+    } else if (page === "admin-purchase-history") {
+      html += this.renderPurchaseHistoryPage()
+    } else if (page === "admin-stock-inventory") {
+      html += this.renderStockInventoryPage()
     } else if (page === "admin-add-product") {
       html += this.renderAddProductForm()
     } else if (page === "admin-edit-product") {
       html += this.renderEditProductForm()
-    } else if (page === "admin-distributors") {
-      html += this.renderDistributorsModule()
-    } else if (page === "admin-purchases") {
-      html += this.renderPurchaseHistoryModule()
-    } else if (page === "admin-reports") {
-      html += this.renderReportsModule()
     }
 
     html += this.renderFooter()
@@ -2316,16 +3115,16 @@ class OwnerPortalApp {
                 <a class="owner-nav-link ${this.currentPage === 'admin-spare-parts' ? 'active' : ''}" data-page="admin-spare-parts">🔩 Spare Parts</a>
               </li>
               <li class="nav-item">
-                <a class="owner-nav-link ${this.currentPage === 'admin-full-stock' ? 'active' : ''}" data-page="admin-full-stock">📊 Full Stock</a>
+                <a class="owner-nav-link ${this.currentPage === 'admin-dealers' ? 'active' : ''}" data-page="admin-dealers">🏪 Dealers</a>
               </li>
               <li class="nav-item">
-                <a class="owner-nav-link ${this.currentPage === 'admin-distributors' ? 'active' : ''}" data-page="admin-distributors">🤝 Distributors</a>
+                <a class="owner-nav-link ${this.currentPage === 'admin-dealer-purchase' ? 'active' : ''}" data-page="admin-dealer-purchase">📥 Dealer Purchase</a>
               </li>
               <li class="nav-item">
-                <a class="owner-nav-link ${this.currentPage === 'admin-purchases' ? 'active' : ''}" data-page="admin-purchases">📥 Purchases</a>
+                <a class="owner-nav-link ${this.currentPage === 'admin-purchase-history' ? 'active' : ''}" data-page="admin-purchase-history">📋 Purchase History</a>
               </li>
               <li class="nav-item">
-                <a class="owner-nav-link ${this.currentPage === 'admin-reports' ? 'active' : ''}" data-page="admin-reports">📈 Reports</a>
+                <a class="owner-nav-link ${this.currentPage === 'admin-stock-inventory' ? 'active' : ''}" data-page="admin-stock-inventory">📦 Stock Inventory</a>
               </li>
 
               <li class="nav-item">
@@ -2436,24 +3235,24 @@ class OwnerPortalApp {
               <span style="color:#0f172a !important;">Spare Parts</span>
             </button>
 
-            <button class="btn" data-page="admin-full-stock" style="padding: 14px 12px; font-size: 13.5px; font-weight:800; display: flex; align-items: center; justify-content: center; gap: 6px; background: linear-gradient(135deg, #059669, #047857); border:1.5px solid #34d399; border-radius:12px; color:#ffffff !important; box-shadow:0 4px 14px rgba(5,150,105,0.25);">
-              <span style="font-size: 18px;">📊</span>
-              <span style="color:#ffffff !important;">Full Stock</span>
+            <button class="btn" data-page="admin-stock-inventory" style="padding: 14px 12px; font-size: 13.5px; font-weight:800; display: flex; align-items: center; justify-content: center; gap: 6px; background: linear-gradient(135deg, #059669, #047857); border:1.5px solid #34d399; border-radius:12px; color:#ffffff !important; box-shadow:0 4px 14px rgba(5,150,105,0.25);">
+              <span style="font-size: 18px;">📦</span>
+              <span style="color:#ffffff !important;">Stock Inventory</span>
             </button>
 
-            <button class="btn" data-page="admin-distributors" style="padding: 14px 12px; font-size: 13.5px; font-weight:800; display: flex; align-items: center; justify-content: center; gap: 6px; background: linear-gradient(135deg, #0284c7, #0369a1); border:1.5px solid #38bdf8; border-radius:12px; color:#ffffff !important; box-shadow:0 4px 14px rgba(2,132,199,0.25);">
-              <span style="font-size: 18px;">🤝</span>
-              <span style="color:#ffffff !important;">Distributors</span>
+            <button class="btn" data-page="admin-dealers" style="padding: 14px 12px; font-size: 13.5px; font-weight:800; display: flex; align-items: center; justify-content: center; gap: 6px; background: linear-gradient(135deg, #0284c7, #0369a1); border:1.5px solid #38bdf8; border-radius:12px; color:#ffffff !important; box-shadow:0 4px 14px rgba(2,132,199,0.25);">
+              <span style="font-size: 18px;">🏪</span>
+              <span style="color:#ffffff !important;">Dealers</span>
             </button>
 
-            <button class="btn" onclick="app.openPurchaseEntryModal()" style="padding: 14px 12px; font-size: 13.5px; font-weight:800; display: flex; align-items: center; justify-content: center; gap: 6px; background: linear-gradient(135deg, #7c3aed, #6d28d9); border:1.5px solid #a78bfa; border-radius:12px; color:#ffffff !important; box-shadow:0 4px 14px rgba(124,58,237,0.25);">
+            <button class="btn" data-page="admin-dealer-purchase" style="padding: 14px 12px; font-size: 13.5px; font-weight:800; display: flex; align-items: center; justify-content: center; gap: 6px; background: linear-gradient(135deg, #7c3aed, #6d28d9); border:1.5px solid #a78bfa; border-radius:12px; color:#ffffff !important; box-shadow:0 4px 14px rgba(124,58,237,0.25);">
               <span style="font-size: 18px;">📥</span>
-              <span style="color:#ffffff !important;">+ Stock Purchase</span>
+              <span style="color:#ffffff !important;">Dealer Purchase</span>
             </button>
 
-            <button class="btn" data-page="admin-reports" style="padding: 14px 12px; font-size: 13.5px; font-weight:800; display: flex; align-items: center; justify-content: center; gap: 6px; background:#ffffff; border:1.5px solid #cbd5e1; border-radius:12px; color:#0f172a !important; box-shadow:0 2px 10px rgba(0,0,0,0.05);">
-              <span style="font-size: 18px;">📈</span>
-              <span style="color:#0f172a !important;">Reports</span>
+            <button class="btn" data-page="admin-purchase-history" style="padding: 14px 12px; font-size: 13.5px; font-weight:800; display: flex; align-items: center; justify-content: center; gap: 6px; background:#ffffff; border:1.5px solid #cbd5e1; border-radius:12px; color:#0f172a !important; box-shadow:0 2px 10px rgba(0,0,0,0.05);">
+              <span style="font-size: 18px;">📋</span>
+              <span style="color:#0f172a !important;">Purchase History</span>
             </button>
           </div>
 
@@ -10230,6 +11029,11 @@ class OwnerPortalApp {
     `;
 
     document.body.insertAdjacentHTML('beforeend', modalHTML);
+    // Auto-focus barcode scanner input when POS modal opens
+    setTimeout(() => {
+      const scannerInput = document.getElementById('posBarcodeScannerInput');
+      if (scannerInput) scannerInput.focus();
+    }, 100);
   }
 
   filterPOSProducts(query) {
@@ -10648,6 +11452,81 @@ class OwnerPortalApp {
       scannerInput.value = '';
       scannerInput.focus();
     }
+  }
+
+  // API-based barcode lookup for POS (used by posBarcodeInput)
+  async lookupPOSBarcode(barcodeStr) {
+    const barcode = (barcodeStr || '').trim();
+    if (!barcode) return;
+
+    try {
+      const res = await fetch(`${this.API_URL}/stock-entries/barcode/${encodeURIComponent(barcode)}`);
+      if (!res.ok || res.status === 404) {
+        this.showPOSToast('Barcode not recognised', '#dc2626');
+        return;
+      }
+      const entry = await res.json();
+
+      if (!entry || Number(entry.currentQuantity) === 0) {
+        this.showPOSToast('This item is out of stock', '#d97706');
+        return;
+      }
+
+      // Find matching product by masterId
+      const product = (this.products || []).find(p => String(p._id || p.id) === String(entry.masterId));
+      if (!product) {
+        this.showPOSToast('Product not found in catalog', '#dc2626');
+        return;
+      }
+
+      // Check if same stockId already in cart
+      const existingItem = (this.posCart || []).find(item =>
+        item.stockId === entry.stockId || 
+        (item.scannedUnits || []).some(u => u.barcode === entry.barcode)
+      );
+
+      if (existingItem) {
+        existingItem.quantity += 1;
+        if (existingItem.scannedUnits) {
+          existingItem.scannedUnits.push({ stockId: entry.stockId, barcode: entry.barcode, imei1: entry.imei1 });
+        }
+      } else {
+        this.posCart.push({
+          productId: product._id || product.id,
+          id: product._id || product.id,
+          name: product.name,
+          price: entry.sellingPrice || Number(product.price) || 0,
+          qty: 1,
+          quantity: 1,
+          unitPrice: entry.sellingPrice || Number(product.price) || 0,
+          stockId: entry.stockId,
+          barcode: entry.barcode,
+          scannedUnits: [{ stockId: entry.stockId, barcode: entry.barcode, imei1: entry.imei1 || '' }]
+        });
+      }
+
+      this.renderPOSCart();
+      this.showPOSToast(`✅ Added: ${product.name}`, '#059669');
+    } catch (err) {
+      this.showPOSToast('Barcode not recognised', '#dc2626');
+    }
+
+    // Clear and re-focus barcode input
+    const posBarcodeInput = document.getElementById('posBarcodeInput');
+    const scannerInput = document.getElementById('posBarcodeScannerInput');
+    if (posBarcodeInput) { posBarcodeInput.value = ''; posBarcodeInput.focus(); }
+    else if (scannerInput) { scannerInput.value = ''; scannerInput.focus(); }
+  }
+
+  showPOSToast(message, bgColor = '#1e293b') {
+    const existing = document.getElementById('posToastMsg');
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.id = 'posToastMsg';
+    toast.style.cssText = `position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:${bgColor}; color:#fff; padding:12px 24px; border-radius:10px; font-weight:800; font-size:14px; z-index:99999; box-shadow:0 4px 16px rgba(0,0,0,0.3); pointer-events:none;`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2500);
   }
 
   // BARCODE PRINTING OPTION - Generates All Purchased Quantity Barcode Labels

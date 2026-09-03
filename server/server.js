@@ -4,6 +4,7 @@ const cors = require('cors');
 const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 // Override DNS to use Google DNS (fixes SRV lookup issues on some networks)
@@ -2005,6 +2006,24 @@ app.put('/api/distributors/:distributorId', async (req, res) => {
   }
 });
 
+app.patch('/api/distributors/:distributorId/status', async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!['Active', 'Inactive'].includes(status)) {
+      return res.status(400).json({ error: 'Status must be Active or Inactive' });
+    }
+    const doc = await Distributor.findOneAndUpdate(
+      { distributorId: req.params.distributorId },
+      { $set: { status } },
+      { new: true }
+    );
+    if (!doc) return res.status(404).json({ error: 'Dealer not found' });
+    res.json(doc);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.delete('/api/distributors/:distributorId', async (req, res) => {
   try {
     const deleted = await Distributor.findOneAndDelete({
@@ -2077,9 +2096,9 @@ app.post('/api/purchases', async (req, res) => {
         const entry = new StockEntry({
           stockId,
           moduleType: 'Product',
-          masterId: String(productId),
+          masterId: String(product._id),
           masterName: product.name,
-          dealerId: distributorId || '',
+          dealerId: dId || '',
           dealerName: distributorName,
           purchaseDate: pDate,
           initialQuantity: 1,
@@ -2102,8 +2121,8 @@ app.post('/api/purchases', async (req, res) => {
           stockEntryId: entry.stockId,
           barcode: entry.barcode,
           moduleType: 'Product',
-          masterId: String(productId),
-          dealerId: distributorId || '',
+          masterId: String(product._id),
+          dealerId: dId || '',
           quantity: 1,
           movementType: 'Stock Purchased',
           date: pDate,
@@ -2189,8 +2208,9 @@ app.post('/api/purchases', async (req, res) => {
 
 app.get('/api/purchases/history', async (req, res) => {
   try {
-    const { distributorId, productId, search } = req.query;
-    const query = { moduleType: 'Product' };
+    const { distributorId, productId, search, moduleType } = req.query;
+    const query = {};
+    if (moduleType) query.moduleType = moduleType;
 
     if (distributorId) query.dealerId = distributorId;
     if (productId) query.masterId = String(productId);
