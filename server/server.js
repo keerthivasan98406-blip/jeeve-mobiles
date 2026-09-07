@@ -84,6 +84,8 @@ mongoose.connect(MONGODB_URI, {
         console.log('ℹ️ Could not drop index:', err.message);
       }
     });
+
+    autoMigrateProductItemIds();
   })
   .catch(err => {
     console.error('❌ MongoDB connection error:', err.message);
@@ -92,10 +94,18 @@ mongoose.connect(MONGODB_URI, {
 
 // Product Schema
 const productSchema = new mongoose.Schema({
+  itemId: { type: String, index: true },
+  sku: { type: String, index: true },
+  barcode: { type: String, index: true },
   name: { type: String, index: true },
   category: { type: String, index: true },
+  subCategory: String,
+  brand: String,
+  model: String,
   price: Number,
+  sellingPrice: Number,
   originalPrice: Number,
+  costPrice: Number,
   ownerPrice: Number,
   stock: { type: Number, default: 0 },
   minStock: { type: Number, default: 5 },
@@ -112,15 +122,37 @@ const productSchema = new mongoose.Schema({
   ownerGender: String
 }, { 
   timestamps: true,
-  // Optimize for read performance
   autoIndex: true
 });
+
+productSchema.index({ itemId: 1 });
+productSchema.index({ barcode: 1 });
 
 // Add compound index for common queries
 productSchema.index({ category: 1, inStock: 1 });
 productSchema.index({ createdAt: 1 });
 
 const Product = mongoose.model('Product', productSchema);
+
+async function autoMigrateProductItemIds() {
+  try {
+    const products = await Product.find({ $or: [{ itemId: { $exists: false } }, { itemId: "" }, { itemId: null }] });
+    if (products.length > 0) {
+      console.log(`📦 Auto-migrating ${products.length} products to assign permanent itemIds...`);
+      for (let i = 0; i < products.length; i++) {
+        const itemIdx = String(i + 1).padStart(6, '0');
+        products[i].itemId = `ITEM-${itemIdx}`;
+        if (!products[i].barcode) {
+          products[i].barcode = `BC-${itemIdx}`;
+        }
+        await products[i].save();
+      }
+      console.log('✅ Permanent itemIds migration complete!');
+    }
+  } catch (err) {
+    console.error('⚠️ Product itemId migration error:', err.message);
+  }
+}
 
 // Tracking Schema
 const trackingSchema = new mongoose.Schema({
@@ -129,6 +161,8 @@ const trackingSchema = new mongoose.Schema({
   customerName: String,
   productName: String,
   deviceModel: String,
+  imeiNumber: String,
+  imsNumber: String,
   contact: String,
   address: String,
   dateIn: String,
@@ -141,7 +175,8 @@ const trackingSchema = new mongoose.Schema({
   paidAmount:    { type: Number, default: 0 },
   totalReceived: { type: Number, default: 0 },
   balanceAmount: { type: Number, default: 0 },
-  balancePaidDate: String,
+  proofImages: [String],
+  signatureImage: String,
   createdAt: String,
   completedAt: String,
   lastUpdated: String
@@ -192,13 +227,18 @@ const salesSchema = new mongoose.Schema({
   productItems: { type: Array, default: [] },  // multi-item support
   productModel: String,
   imeiNumber: String,
+  imsNumber: String,
+  proofImages: { type: Array, default: [] },
+  signatureImage: String,
   saleAmount: Number,
   discount: { type: Number, default: 0 },
+  netAmount: Number,
+  paymentMethod: { type: String, default: 'Cash' },
   purchaseDate: { type: String, required: true },
   warrantyPeriod: String,
   notes: String,
   createdAt: { type: String }
-}, { timestamps: true });
+}, { timestamps: true, strict: false });
 
 const SalesRecord = mongoose.model('SalesRecord', salesSchema);
 
@@ -299,6 +339,34 @@ const stockMovementSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const StockMovement = mongoose.model('StockMovement', stockMovementSchema);
+
+// Purchase Transaction / Bill Schema
+const purchaseSchema = new mongoose.Schema({
+  purchaseId: { type: String, required: true, unique: true },
+  billNumber: { type: String, required: true, unique: true },
+  distributorId: { type: String, required: true },
+  distributorName: { type: String, required: true },
+  distributorMobile: { type: String, default: '' },
+  purchaseDate: { type: String, required: true },
+  month: { type: String, required: true },
+  year: { type: String, required: true },
+  items: [{
+    productId: String,
+    productName: { type: String, required: true },
+    barcode: String,
+    quantity: { type: Number, required: true },
+    distributorPrice: { type: Number, required: true },
+    ownerPrice: { type: Number, default: 0 },
+    customerPrice: { type: Number, default: 0 },
+    total: { type: Number, required: true }
+  }],
+  totalQuantity: { type: Number, required: true },
+  totalAmount: { type: Number, required: true },
+  notes: String
+}, { timestamps: true });
+
+const Purchase = mongoose.model('Purchase', purchaseSchema);
+
 const uploadImageToCloud = async (base64Data, fileName) => {
   try {
     // File saving disabled - screenshots only stored in database as base64
@@ -1409,13 +1477,74 @@ app.post('/api/sales', async (req, res) => {
     });
     await sale.save();
 
-    // AUTO STOCK DEDUCTION LOGIC (Master Product + Scanned Units / Batch Level FIFO)
+    // AUTO STOCK DEDUCTION LOGIC (Product, Display Stock & Spare Parts)
     const deductProduct = async (item) => {
       const pId = item.id || item.productId || item._id;
       const qty = parseInt(item.quantity || 1, 10);
+      const itemType = (item.type || item.itemType || item.moduleType || '').toLowerCase();
       if (!pId) return;
 
       try {
+        if (itemType === 'display' || itemType === 'display stock') {
+          let displayItem = await DisplayStock.findOne({ stockItemId: String(pId) });
+          if (!displayItem && mongoose.Types.ObjectId.isValid(pId)) {
+            displayItem = await DisplayStock.findById(pId);
+          }
+          if (!displayItem) {
+            displayItem = await DisplayStock.findOne({ displayName: item.name });
+          }
+          if (displayItem) {
+            const oldStock = Number(displayItem.stock) || 0;
+            displayItem.stock = Math.max(0, oldStock - qty);
+            const histEntry = {
+              date: pDate,
+              reason: `POS / Sales Record #${saleId}`,
+              type: 'REDUCE',
+              change: -qty,
+              customerName: cName,
+              customerPhone: pPhone,
+              saleId: saleId,
+              imsNumber: req.body.imsNumber || req.body.imeiNumber || ''
+            };
+            if (!displayItem.history) displayItem.history = [];
+            displayItem.history.push(histEntry);
+            await displayItem.save();
+            io.emit('display-stock-updated', displayItem.toObject());
+            console.log(`📱 [POS SALE DEDUCT SUCCESS] Display Stock "${displayItem.displayName}": ${oldStock} -> ${displayItem.stock} (Deducted: ${qty})`);
+          }
+          return;
+        }
+
+        if (itemType === 'spare' || itemType === 'spare part' || itemType === 'spareparts') {
+          const SP = getSparePartsModel();
+          let spareItem = await SP.findOne({ partItemId: String(pId) });
+          if (!spareItem && mongoose.Types.ObjectId.isValid(pId)) {
+            spareItem = await SP.findById(pId);
+          }
+          if (!spareItem) {
+            spareItem = await SP.findOne({ partName: item.name });
+          }
+          if (spareItem) {
+            const oldStock = Number(spareItem.stock) || 0;
+            spareItem.stock = Math.max(0, oldStock - qty);
+            const histEntry = {
+              date: pDate,
+              reason: `POS / Sales Record #${saleId}`,
+              change: -qty,
+              customerName: cName,
+              customerPhone: pPhone,
+              saleId: saleId,
+              imsNumber: req.body.imsNumber || req.body.imeiNumber || ''
+            };
+            if (!spareItem.history) spareItem.history = [];
+            spareItem.history.push(histEntry);
+            await spareItem.save();
+            io.emit('spare-part-updated', spareItem.toObject());
+            console.log(`🔩 [POS SALE DEDUCT SUCCESS] Spare Part "${spareItem.partName}": ${oldStock} -> ${spareItem.stock} (Deducted: ${qty})`);
+          }
+          return;
+        }
+
         let product = null;
         if (mongoose.Types.ObjectId.isValid(pId)) {
           product = await Product.findById(pId);
@@ -1970,13 +2099,31 @@ app.post('/api/distributors', async (req, res) => {
       return res.status(400).json({ error: 'Distributor Name and Phone Number are required' });
     }
 
+    const trimmedName = name.trim();
+    const trimmedPhone = phone.trim();
+
+    // Check duplicate name or phone number
+    const existing = await Distributor.findOne({
+      $or: [
+        { name: { $regex: `^${trimmedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } },
+        { phone: trimmedPhone }
+      ]
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        error: 'Distributor already exists. Please add a new purchase entry to the existing distributor.',
+        existingDistributor: existing
+      });
+    }
+
     const distributorId = 'DIST-' + Date.now();
     const distributor = new Distributor({
       distributorId,
-      name,
-      code: code || name.substring(0, 4).toUpperCase(),
+      name: trimmedName,
+      code: code || trimmedName.substring(0, 4).toUpperCase(),
       contactPerson: contactPerson || '',
-      phone,
+      phone: trimmedPhone,
       email: email || '',
       address: address || '',
       gstNumber: gstNumber || '',
@@ -2001,24 +2148,6 @@ app.put('/api/distributors/:distributorId', async (req, res) => {
     );
     if (!distributor) return res.status(404).json({ error: 'Distributor not found' });
     res.json(distributor);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.patch('/api/distributors/:distributorId/status', async (req, res) => {
-  try {
-    const { status } = req.body;
-    if (!['Active', 'Inactive'].includes(status)) {
-      return res.status(400).json({ error: 'Status must be Active or Inactive' });
-    }
-    const doc = await Distributor.findOneAndUpdate(
-      { distributorId: req.params.distributorId },
-      { $set: { status } },
-      { new: true }
-    );
-    if (!doc) return res.status(404).json({ error: 'Dealer not found' });
-    res.json(doc);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -2202,6 +2331,248 @@ app.post('/api/purchases', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error recording purchase:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Multi-Product Batch Purchase Transaction Endpoint
+app.post('/api/purchases/batch', async (req, res) => {
+  try {
+    const { distributorId, items, purchaseDate, notes } = req.body;
+    if (!distributorId || !items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Distributor and at least one purchase item are required.' });
+    }
+
+    const distributor = await Distributor.findOne({
+      $or: [
+        { distributorId },
+        { _id: mongoose.Types.ObjectId.isValid(distributorId) ? distributorId : null }
+      ].filter(q => q._id !== null)
+    });
+
+    if (!distributor) {
+      return res.status(404).json({ error: 'Distributor not found.' });
+    }
+
+    const pDate = purchaseDate || new Date().toISOString().split('T')[0];
+    const dateObj = new Date(pDate);
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const month = months[dateObj.getMonth()] || 'September';
+    const year = String(dateObj.getFullYear() || 2026);
+
+    // Sequential Bill Number Generation: PUR-0001, PUR-0002...
+    const count = await Purchase.countDocuments();
+    const billNumber = `PUR-${String(count + 1).padStart(4, '0')}`;
+    const purchaseId = `PURCHASE-${Date.now()}`;
+
+    let totalQuantity = 0;
+    let totalAmount = 0;
+    const processedItems = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const productName = (item.productName || '').trim();
+      const barcode = (item.barcode || '').trim();
+      const qty = parseInt(item.quantity || 0, 10);
+      const distPrice = Number(item.distributorPrice || 0);
+      const ownerPrice = Number(item.ownerPrice || 0);
+      const customerPrice = Number(item.customerPrice || 0);
+
+      if (!productName || qty <= 0 || distPrice < 0) {
+        continue;
+      }
+
+      const itemTotal = qty * distPrice;
+      totalQuantity += qty;
+      totalAmount += itemTotal;
+
+      // Find or create product in Product Inventory
+      let product = null;
+      if (barcode) {
+        product = await Product.findOne({ barcode });
+      }
+      if (!product && productName) {
+        product = await Product.findOne({ name: { $regex: `^${productName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } });
+      }
+
+      let productId = '';
+
+      const itemBarcode = barcode || (product ? product.barcode : `BC-${Date.now()}-${i}`);
+
+      if (product) {
+        productId = String(product._id || product.id);
+        const existingStock = Number(product.stock) || 0;
+        const newStock = existingStock + qty;
+
+        const updateFields = {
+          stock: newStock,
+          inStock: true
+        };
+        if (customerPrice > 0) updateFields.price = customerPrice;
+        if (ownerPrice > 0) updateFields.ownerPrice = ownerPrice;
+        if (distPrice > 0) updateFields.costPrice = distPrice;
+
+        const updatedProduct = await Product.findByIdAndUpdate(product._id, updateFields, { new: true });
+        if (updatedProduct) {
+          const transformed = { ...updatedProduct.toObject(), id: updatedProduct._id.toString() };
+          io.emit('product-updated', transformed);
+        }
+      } else {
+        // Create new Product record
+        const newProd = new Product({
+          id: 'PROD-' + Date.now() + '-' + i,
+          name: productName,
+          barcode: itemBarcode,
+          category: 'General',
+          stock: qty,
+          inStock: true,
+          price: customerPrice > 0 ? customerPrice : ownerPrice > 0 ? ownerPrice : Math.round(distPrice * 1.2),
+          originalPrice: customerPrice > 0 ? Math.round(customerPrice * 1.2) : Math.round(distPrice * 1.5),
+          ownerPrice: ownerPrice > 0 ? ownerPrice : Math.round(distPrice * 1.1),
+          costPrice: distPrice,
+          dealerId: distributor.distributorId,
+          dealerName: distributor.name
+        });
+        await newProd.save();
+        productId = String(newProd._id);
+        const transformed = { ...newProd.toObject(), id: newProd._id.toString() };
+        io.emit('product-added', transformed);
+      }
+
+      // Record StockEntry batch for audit log
+      const stockId = 'STK-' + Date.now() + '-' + i;
+      const batchBarcode = itemBarcode ? `${itemBarcode}-B${Date.now()}-${i}` : `STK-PROD-${Date.now()}-${i}`;
+      const entry = new StockEntry({
+        stockId,
+        moduleType: 'Product',
+        masterId: productId,
+        masterName: productName,
+        dealerId: distributor.distributorId,
+        dealerName: distributor.name,
+        purchaseDate: pDate,
+        initialQuantity: qty,
+        currentQuantity: qty,
+        purchasePrice: distPrice,
+        mrp: customerPrice,
+        sellingPrice: customerPrice,
+        barcode: batchBarcode,
+        notes: `Purchase Bill #${billNumber}`,
+        status: 'In Stock'
+      });
+      await entry.save();
+
+      processedItems.push({
+        productId,
+        productName,
+        barcode: itemBarcode,
+        quantity: qty,
+        distributorPrice: distPrice,
+        ownerPrice,
+        customerPrice,
+        total: itemTotal
+      });
+    }
+
+    if (processedItems.length === 0) {
+      return res.status(400).json({ error: 'No valid product rows provided in purchase entry.' });
+    }
+
+    const purchase = new Purchase({
+      purchaseId,
+      billNumber,
+      distributorId: distributor.distributorId,
+      distributorName: distributor.name,
+      distributorMobile: distributor.phone || '',
+      purchaseDate: pDate,
+      month,
+      year,
+      items: processedItems,
+      totalQuantity,
+      totalAmount,
+      notes: notes || ''
+    });
+
+    await purchase.save();
+    console.log(`📦 [PURCHASE SAVED] Bill #${billNumber} for ${distributor.name}: ${processedItems.length} products, Total Qty: ${totalQuantity}, Total ₹${totalAmount}`);
+
+    res.json({
+      success: true,
+      message: `Purchase Bill #${billNumber} saved successfully.`,
+      purchase
+    });
+  } catch (error) {
+    console.error('❌ Error saving purchase batch:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET All Purchase Bills across distributors
+app.get('/api/purchases/bills', async (req, res) => {
+  try {
+    const { search, distributorId, month, year, date } = req.query;
+    const query = {};
+
+    if (distributorId) query.distributorId = distributorId;
+    if (month && month !== 'all') query.month = month;
+    if (year && year !== 'all') query.year = year;
+    if (date) query.purchaseDate = date;
+
+    if (search) {
+      query.$or = [
+        { billNumber: { $regex: search, $options: 'i' } },
+        { distributorName: { $regex: search, $options: 'i' } },
+        { distributorMobile: { $regex: search, $options: 'i' } },
+        { 'items.productName': { $regex: search, $options: 'i' } },
+        { 'items.barcode': { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const purchases = await Purchase.find(query).sort({ createdAt: -1 });
+    res.json(purchases);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET Single Purchase Bill by Bill Number or Purchase ID
+app.get('/api/purchases/bill/:billNumber', async (req, res) => {
+  try {
+    const purchase = await Purchase.findOne({
+      $or: [
+        { billNumber: req.params.billNumber },
+        { purchaseId: req.params.billNumber }
+      ]
+    });
+    if (!purchase) return res.status(404).json({ error: 'Purchase bill not found' });
+    res.json(purchase);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE Purchase Bill by Bill Number or Purchase ID
+app.delete('/api/purchases/bill/:billNumber', async (req, res) => {
+  try {
+    const deleted = await Purchase.findOneAndDelete({
+      $or: [
+        { billNumber: req.params.billNumber },
+        { purchaseId: req.params.billNumber }
+      ]
+    });
+    if (!deleted) return res.status(404).json({ error: 'Purchase bill not found' });
+    io.emit('purchase-bill-deleted', { billNumber: req.params.billNumber });
+    res.json({ success: true, message: 'Purchase bill deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET Purchase History for specific distributor
+app.get('/api/distributors/:distributorId/purchases', async (req, res) => {
+  try {
+    const purchases = await Purchase.find({ distributorId: req.params.distributorId }).sort({ createdAt: -1 });
+    res.json(purchases);
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });

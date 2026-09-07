@@ -1216,13 +1216,14 @@ class ManjulaMobilesApp {
     const password = document.getElementById("newTrackingPassword")?.value?.trim();
     const customer = document.getElementById("newTrackingCustomer")?.value?.trim();
     const device = document.getElementById("newTrackingDevice")?.value?.trim();
+    const imei = document.getElementById("newTrackingImei")?.value?.trim();
     const contact = document.getElementById("newTrackingContact")?.value?.trim();
     const issue = document.getElementById("newTrackingIssue")?.value?.trim();
     const status = document.getElementById("newTrackingStatus")?.value;
     const days = document.getElementById("newTrackingDays")?.value;
 
-    if (!qrId || !password || !customer || !device || !issue) {
-      alert("Please fill all required fields: QR ID, Password, Customer Name, Device Model, and Issue Description");
+    if (!qrId || !password || !customer || !device || !imei || !issue) {
+      alert("Please fill all compulsory fields: QR ID, Password, Customer Name, Device Model, IMS / IMEI Number, and Issue Description");
       return;
     }
 
@@ -1240,6 +1241,8 @@ class ManjulaMobilesApp {
         customerName: customer,
         productName: device,
         deviceModel: device,
+        imeiNumber: imei,
+        imsNumber: imei,
         contact: contact,
         status: status,
         issue: issue,
