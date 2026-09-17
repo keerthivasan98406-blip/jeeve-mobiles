@@ -5911,7 +5911,10 @@ class OwnerPortalApp {
               </div>
               <div>
                 <label style="font-size:13px; font-weight:600; color:#374151; display:block; margin-bottom:4px;">Barcode ID (Manual Typing)</label>
-                <input class="input" id="stk_barcode" placeholder="Enter barcode manually (e.g. DISP-1001)" style="width:100%; background:#ffffff; color:#0f172a; font-weight:700;">
+                <input class="input" id="stk_barcode" placeholder="Enter barcode manually (e.g. DISP-1001)" style="width:100%; background:#ffffff; color:#0f172a; font-weight:700;" oninput="app._renderDisplayFormBarcode(this.value)">
+                <div style="background:#fff; padding:6px; border-radius:8px; text-align:center; margin-top:8px; border:1px solid #cbd5e1; display:inline-block;">
+                  <canvas id="displayFormBarcodeCanvas" style="display:none; max-width:100%; height:40px;"></canvas>
+                </div>
               </div>
             </div>
 
@@ -5960,6 +5963,7 @@ class OwnerPortalApp {
                     <tr style="background:#1e293b; color:#fff; text-align:left;">
                       <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; width:36px;">#</th>
                       <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; min-width:180px;">Display Name</th>
+                      <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; min-width:150px; text-align:center;">Barcode</th>
                       <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; min-width:110px; text-align:center;">Customer Price (₹)</th>
                       <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; min-width:100px; text-align:center;">Stock</th>
                       <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; min-width:170px; text-align:center;">
@@ -5984,6 +5988,25 @@ class OwnerPortalApp {
                       const stockColor  = stock === 0 ? '#dc2626' : stock <= 1 ? '#dc2626' : stock <= 3 ? '#d97706' : '#16a34a';
                       const stockBg     = stock === 0 ? '#fef2f2' : stock <= 1 ? '#fef2f2' : stock <= 3 ? '#fffbeb' : '#f0fdf4';
                       const rowBg       = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+                      const itemBarcode = item.barcode || item.displayId || '';
+                      const dispBcId    = `bc_disp_${item.stockItemId.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+                      setTimeout(() => {
+                        const el = document.getElementById(dispBcId);
+                        if (el && typeof JsBarcode !== 'undefined' && itemBarcode) {
+                          try {
+                            JsBarcode(el, itemBarcode, {
+                              format: 'CODE128', width: 1.5, height: 32,
+                              displayValue: true, fontSize: 11, margin: 4,
+                              background: '#ffffff', lineColor: '#000000',
+                              font: 'monospace', fontOptions: 'bold'
+                            });
+                            el.style.display = 'block';
+                            el.style.width = '120px';
+                          } catch(e) {}
+                        }
+                      }, 50);
+
                       return `
                         <tr class="stock-item-row" data-id="${item.stockItemId}" style="background:${rowBg}; border-bottom:1px solid #e2e8f0; transition:background 0.3s;"
                             onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='${rowBg}'">
@@ -5992,6 +6015,25 @@ class OwnerPortalApp {
                             ${item.displayName}
                             ${stock <= 1 && stock > 0 ? `<span style="margin-left:6px; background:#fef2f2; color:#dc2626; font-size:10px; font-weight:800; padding:2px 7px; border-radius:4px; border:1px solid #fca5a5;">⚠️ LAST 1</span>` : ''}
                             ${stock === 0 ? `<span style="margin-left:6px; background:#fef2f2; color:#dc2626; font-size:10px; font-weight:800; padding:2px 7px; border-radius:4px; border:1px solid #fca5a5;">❌ OUT</span>` : ''}
+                          </td>
+                          <td style="padding:8px 14px; text-align:center; border-right:1px solid #e2e8f0;">
+                            <div style="display:inline-flex; flex-direction:column; align-items:center; gap:4px;">
+                              <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:6px; padding:4px; text-align:center; cursor:pointer; display:flex; align-items:center; justify-content:center;"
+                                   onclick="app.printStockBarcodeLabel('${itemBarcode}', 'browser')"
+                                   title="Click to print barcode label">
+                                <svg id="${dispBcId}" style="display:none; width:120px; height:45px;"></svg>
+                              </div>
+                              <div style="display:flex; gap:4px; justify-content:center;">
+                                <button onclick="app.printStockBarcodeLabel('${itemBarcode}', 'browser')"
+                                  style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:4px; padding:2px 6px; font-size:10px; font-weight:600; cursor:pointer;" title="Print Browser Label">
+                                  🏷️ Print
+                                </button>
+                                <button onclick="app.printSparePartTSCLabel('${itemBarcode}', '${(item.displayName||'').replace(/'/g, "\\'")}')"
+                                  style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:4px; padding:2px 6px; font-size:10px; font-weight:600; cursor:pointer;" title="Print TSC Label">
+                                  🖶 TSC
+                                </button>
+                              </div>
+                            </div>
                           </td>
                           <td style="padding:10px 14px; text-align:center; color:#16a34a; font-weight:700; border-right:1px solid #e2e8f0;">
                             ${price ? `₹${price.toLocaleString('en-IN')}` : '<span style="color:#9ca3af;">—</span>'}
@@ -6344,6 +6386,16 @@ class OwnerPortalApp {
                 style="width:100%; background:#f8fafc; color:#111; border:1px solid #d1d5db;">
             </div>
             <div>
+              <label style="font-size:13px; font-weight:600; color:#374151; display:block; margin-bottom:4px;">Barcode ID</label>
+              <input id="edit_barcode" class="input" value="${item.barcode || item.displayId || ''}"
+                placeholder="Barcode ID"
+                oninput="app._renderEditDisplayBarcode(this.value)"
+                style="width:100%; background:#f8fafc; color:#111; border:1px solid #d1d5db;">
+              <div style="background:#fff; padding:6px; border-radius:8px; text-align:center; margin-top:8px; border:1px solid #cbd5e1; display:inline-block;">
+                <canvas id="editDisplayBarcodeCanvas" style="display:none; max-width:100%; height:40px;"></canvas>
+              </div>
+            </div>
+            <div>
               <label style="font-size:13px; font-weight:600; color:#374151; display:block; margin-bottom:4px;">Customer Price (₹)</label>
               <input id="edit_price" class="input" type="number" min="0" value="${item.price || ''}"
                 placeholder="Customer price"
@@ -6370,6 +6422,7 @@ class OwnerPortalApp {
   async saveEditDisplayStock(stockItemId) {
     const displayName = document.getElementById('edit_displayName')?.value?.trim();
     const displayId   = document.getElementById('edit_displayId')?.value?.trim();
+    const barcode     = document.getElementById('edit_barcode')?.value?.trim() || displayId;
     const priceVal    = document.getElementById('edit_price')?.value;
 
     if (!displayName || !displayId) {
@@ -6380,6 +6433,7 @@ class OwnerPortalApp {
     const updates = {
       displayName,
       displayId,
+      barcode,
       price: priceVal !== '' && priceVal !== null ? Number(priceVal) : null
     };
 
@@ -12146,6 +12200,49 @@ class OwnerPortalApp {
     });
     const next = max + 1;
     return String(next).padStart(4, '0');
+  }
+
+  _renderDisplayFormBarcode(value) {
+    const canvas = document.getElementById('displayFormBarcodeCanvas');
+    if (!canvas) return;
+    if (!value) {
+      canvas.style.display = 'none';
+      return;
+    }
+    if (typeof JsBarcode === 'undefined') {
+      setTimeout(() => this._renderDisplayFormBarcode(value), 300);
+      return;
+    }
+    try {
+      JsBarcode(canvas, value, {
+        format: 'CODE128', width: 2, height: 40,
+        displayValue: true, fontSize: 13, margin: 4,
+        background: '#ffffff', lineColor: '#000000'
+      });
+      canvas.style.display = 'block';
+      canvas.style.margin = '0 auto';
+    } catch(e) { console.warn('Barcode render error:', e); }
+  }
+
+  _renderEditDisplayBarcode(value) {
+    const canvas = document.getElementById('editDisplayBarcodeCanvas');
+    if (!canvas) return;
+    if (!value) {
+      canvas.style.display = 'none';
+      return;
+    }
+    if (typeof JsBarcode === 'undefined') {
+      setTimeout(() => this._renderEditDisplayBarcode(value), 300);
+      return;
+    }
+    try {
+      JsBarcode(canvas, value, {
+        format: 'CODE128', width: 2, height: 40,
+        displayValue: true, fontSize: 13, margin: 4,
+        background: '#ffffff', lineColor: '#000000'
+      });
+      canvas.style.display = 'block';
+    } catch(e) { console.warn('Barcode render error:', e); }
   }
 
   _renderSparePartsFormBarcode(value) {
