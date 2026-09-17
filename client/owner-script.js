@@ -5965,10 +5965,22 @@ class OwnerPortalApp {
                       <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; min-width:180px;">Display Name</th>
                       <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; min-width:150px; text-align:center;">Barcode</th>
                       <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; min-width:110px; text-align:center;">Customer Price (₹)</th>
+                      <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; min-width:110px; text-align:center;">
+                        <div style="display:flex; flex-direction:column; align-items:center; gap:2px;">
+                          <span>Owner Price (₹)</span>
+                          <span style="font-size:9px; color:#94a3b8; font-weight:500;">🔒 Password</span>
+                        </div>
+                      </th>
                       <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; min-width:100px; text-align:center;">Stock</th>
+                      <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; min-width:130px; text-align:center;">
+                        <div style="display:flex; flex-direction:column; align-items:center; gap:2px;">
+                          <span>Cust Total (₹)</span>
+                          <span style="font-size:9px; color:#94a3b8; font-weight:500;">Cust × Stock</span>
+                        </div>
+                      </th>
                       <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; min-width:170px; text-align:center;">
                         <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
-                          <span>Total Value (₹) + Password</span>
+                          <span>Owner Total (₹) 🔒</span>
                           <input type="password" id="stockTotalValuePassword" placeholder="Enter password"
                             value="${this.stockTotalValueUnlocked ? 'admin123' : ''}"
                             oninput="app.checkStockTotalValuePassword(this.value)"
@@ -6038,15 +6050,24 @@ class OwnerPortalApp {
                           <td style="padding:10px 14px; text-align:center; color:#16a34a; font-weight:700; border-right:1px solid #e2e8f0;">
                             ${price ? `₹${price.toLocaleString('en-IN')}` : '<span style="color:#9ca3af;">—</span>'}
                           </td>
+                          <td style="padding:10px 14px; text-align:center; font-weight:700; border-right:1px solid #e2e8f0; color:#d97706;">
+                            ${this.stockTotalValueUnlocked
+                              ? (item.costPrice ? `₹${Number(item.costPrice).toLocaleString('en-IN')}` : '<span style="color:#9ca3af;">—</span>')
+                              : '<span style="color:#94a3b8; font-family:monospace; font-size:14px;">••••</span>'
+                            }
+                          </td>
                           <td style="padding:10px 14px; text-align:center; border-right:1px solid #e2e8f0;">
                             <span style="display:inline-block; background:${stockBg}; color:${stockColor}; font-weight:900; font-size:18px; min-width:48px; padding:4px 10px; border-radius:6px; border:1px solid ${stockColor}40;">
                               ${stock}
                             </span>
                           </td>
+                          <td style="padding:10px 14px; text-align:center; font-weight:700; color:#0ea5e9; border-right:1px solid #e2e8f0;">
+                            ${price && stock ? `₹${(price * stock).toLocaleString('en-IN')}` : '<span style="color:#9ca3af;">—</span>'}
+                          </td>
                           <td style="padding:10px 14px; text-align:center; font-weight:700; color:#1d4ed8; border-right:1px solid #e2e8f0;">
-                            ${this.stockTotalValueUnlocked ? 
-                              (price && stock ? `₹${totalValue.toLocaleString('en-IN')}` : '<span style="color:#9ca3af;">—</span>') :
-                              '<span style="color:#94a3b8; font-family:monospace; font-size:14px;">••••</span>'
+                            ${this.stockTotalValueUnlocked
+                              ? (item.costPrice && stock ? `₹${(Number(item.costPrice) * stock).toLocaleString('en-IN')}` : '<span style="color:#9ca3af;">—</span>')
+                              : '<span style="color:#94a3b8; font-family:monospace; font-size:14px;">••••</span>'
                             }
                           </td>
                           <td style="padding:8px 14px; border-right:1px solid #e2e8f0;">
