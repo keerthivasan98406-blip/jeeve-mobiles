@@ -1425,6 +1425,11 @@ class OwnerPortalApp {
       );
     }
 
+    const allDistributors = this.distributors || [];
+    const activeCount = allDistributors.filter(d => d.status !== 'Inactive').length;
+    const totalInvoicesCount = (this.purchaseBills || []).length;
+    const totalPurchasedSpend = (this.purchaseBills || []).reduce((sum, b) => sum + Number(b.totalAmount || 0), 0);
+
     return `
       <div class="owner-portal-page" style="min-height: 100vh; background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 50%, #f0f9ff 100%); color: #0f172a; padding-top: 96px; padding-bottom: 80px;">
         <div class="container" style="max-width: 1300px; margin: 0 auto; padding: 0 16px;">
@@ -1442,6 +1447,38 @@ class OwnerPortalApp {
               <button onclick="app.openAddDistributorModal()" style="background: linear-gradient(135deg, #059669, #047857); color: #fff; border: none; padding: 12px 24px; border-radius: 10px; font-weight: 800; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 14px rgba(5,150,105,0.25);">
                 ➕ + Add Distributor
               </button>
+            </div>
+          </div>
+
+          <!-- Summary Analytics Bar -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px;">
+            <div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 14px; padding: 18px; box-shadow: 0 4px 14px rgba(0,0,0,0.04); display: flex; align-items: center; gap: 16px;">
+              <div style="width: 48px; height: 48px; border-radius: 12px; background: #eff6ff; color: #2563eb; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800;">🤝</div>
+              <div>
+                <div style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Total Suppliers</div>
+                <div style="font-size: 24px; font-weight: 800; color: #0f172a;">${allDistributors.length}</div>
+              </div>
+            </div>
+            <div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 14px; padding: 18px; box-shadow: 0 4px 14px rgba(0,0,0,0.04); display: flex; align-items: center; gap: 16px;">
+              <div style="width: 48px; height: 48px; border-radius: 12px; background: #ecfdf5; color: #059669; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800;">✅</div>
+              <div>
+                <div style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Active Suppliers</div>
+                <div style="font-size: 24px; font-weight: 800; color: #059669;">${activeCount}</div>
+              </div>
+            </div>
+            <div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 14px; padding: 18px; box-shadow: 0 4px 14px rgba(0,0,0,0.04); display: flex; align-items: center; gap: 16px;">
+              <div style="width: 48px; height: 48px; border-radius: 12px; background: #fef3c7; color: #d97706; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800;">📄</div>
+              <div>
+                <div style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Total Bills</div>
+                <div style="font-size: 24px; font-weight: 800; color: #0f172a;">${totalInvoicesCount}</div>
+              </div>
+            </div>
+            <div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 14px; padding: 18px; box-shadow: 0 4px 14px rgba(0,0,0,0.04); display: flex; align-items: center; gap: 16px;">
+              <div style="width: 48px; height: 48px; border-radius: 12px; background: #f3e8ff; color: #9333ea; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800;">💳</div>
+              <div>
+                <div style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Total Sourced Spend</div>
+                <div style="font-size: 24px; font-weight: 800; color: #9333ea;">₹${totalPurchasedSpend.toLocaleString('en-IN')}</div>
+              </div>
             </div>
           </div>
 
@@ -2115,6 +2152,11 @@ class OwnerPortalApp {
       );
     }
 
+    const totalBillsCount = list.length;
+    const totalPurchasedQty = list.reduce((sum, b) => sum + Number(b.totalQuantity || 0), 0);
+    const totalPurchasedAmount = list.reduce((sum, b) => sum + Number(b.totalAmount || 0), 0);
+    const avgBillAmount = totalBillsCount > 0 ? (totalPurchasedAmount / totalBillsCount) : 0;
+
     return `
       <div class="owner-portal-page" style="min-height: 100vh; background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 50%, #f0f9ff 100%); color: #0f172a; padding-top: 96px; padding-bottom: 80px;">
         <div class="container" style="max-width: 1380px; margin: 0 auto; padding: 0 16px;">
@@ -2127,6 +2169,38 @@ class OwnerPortalApp {
                 📄 Global Purchase Bills
               </h1>
               <p style="color: #475569; font-size: 14px; margin-top: 4px;">Permanent records of all distributor purchase invoices and historical product bills.</p>
+            </div>
+          </div>
+
+          <!-- Summary Metrics Banner -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px;">
+            <div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 14px; padding: 18px; box-shadow: 0 4px 14px rgba(0,0,0,0.04); display: flex; align-items: center; gap: 16px;">
+              <div style="width: 48px; height: 48px; border-radius: 12px; background: #eff6ff; color: #2563eb; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800;">📄</div>
+              <div>
+                <div style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Filtered Invoices</div>
+                <div style="font-size: 24px; font-weight: 800; color: #0f172a;">${totalBillsCount}</div>
+              </div>
+            </div>
+            <div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 14px; padding: 18px; box-shadow: 0 4px 14px rgba(0,0,0,0.04); display: flex; align-items: center; gap: 16px;">
+              <div style="width: 48px; height: 48px; border-radius: 12px; background: #ecfdf5; color: #059669; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800;">📦</div>
+              <div>
+                <div style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Total Purchased Qty</div>
+                <div style="font-size: 24px; font-weight: 800; color: #059669;">${totalPurchasedQty.toLocaleString('en-IN')} units</div>
+              </div>
+            </div>
+            <div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 14px; padding: 18px; box-shadow: 0 4px 14px rgba(0,0,0,0.04); display: flex; align-items: center; gap: 16px;">
+              <div style="width: 48px; height: 48px; border-radius: 12px; background: #fef3c7; color: #d97706; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800;">💰</div>
+              <div>
+                <div style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Total Sourced Spend</div>
+                <div style="font-size: 24px; font-weight: 800; color: #d97706;">₹${totalPurchasedAmount.toLocaleString('en-IN')}</div>
+              </div>
+            </div>
+            <div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 14px; padding: 18px; box-shadow: 0 4px 14px rgba(0,0,0,0.04); display: flex; align-items: center; gap: 16px;">
+              <div style="width: 48px; height: 48px; border-radius: 12px; background: #f3e8ff; color: #9333ea; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800;">📊</div>
+              <div>
+                <div style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Avg Invoice Value</div>
+                <div style="font-size: 24px; font-weight: 800; color: #9333ea;">₹${Math.round(avgBillAmount).toLocaleString('en-IN')}</div>
+              </div>
             </div>
           </div>
 
@@ -5824,7 +5898,7 @@ class OwnerPortalApp {
                   <input type="number" id="stk_costPrice" placeholder="1200" class="input" style="width:100%; font-size:12px;">
                 </div>
                 <div>
-                  <label style="font-size:11px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Selling Price (₹)</label>
+                  <label style="font-size:11px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Customer Price (₹)</label>
                   <input class="input" type="number" id="stk_price" placeholder="1800" min="0" style="width:100%; font-size:12px;">
                 </div>
               </div>
@@ -5836,8 +5910,8 @@ class OwnerPortalApp {
                 <input class="input" type="number" id="stk_stock" placeholder="Enter pcs" value="1" min="1" style="width:100%;">
               </div>
               <div>
-                <label style="font-size:13px; font-weight:600; color:#374151; display:block; margin-bottom:4px;">Auto Barcode</label>
-                <input class="input" id="stk_barcode" value="${this.generateStockBarcode('Display')}" readonly style="width:100%; background:#dbeafe; color:#1e40af; font-weight:800;">
+                <label style="font-size:13px; font-weight:600; color:#374151; display:block; margin-bottom:4px;">Barcode ID (Manual Typing)</label>
+                <input class="input" id="stk_barcode" placeholder="Enter barcode manually (e.g. DISP-1001)" style="width:100%; background:#ffffff; color:#0f172a; font-weight:700;">
               </div>
             </div>
 
@@ -5886,7 +5960,7 @@ class OwnerPortalApp {
                     <tr style="background:#1e293b; color:#fff; text-align:left;">
                       <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; width:36px;">#</th>
                       <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; min-width:180px;">Display Name</th>
-                      <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; min-width:90px; text-align:center;">Price (₹)</th>
+                      <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; min-width:110px; text-align:center;">Customer Price (₹)</th>
                       <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; min-width:100px; text-align:center;">Stock</th>
                       <th style="padding:12px 14px; font-weight:700; border-right:1px solid #334155; min-width:170px; text-align:center;">
                         <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
@@ -5919,11 +5993,8 @@ class OwnerPortalApp {
                             ${stock <= 1 && stock > 0 ? `<span style="margin-left:6px; background:#fef2f2; color:#dc2626; font-size:10px; font-weight:800; padding:2px 7px; border-radius:4px; border:1px solid #fca5a5;">⚠️ LAST 1</span>` : ''}
                             ${stock === 0 ? `<span style="margin-left:6px; background:#fef2f2; color:#dc2626; font-size:10px; font-weight:800; padding:2px 7px; border-radius:4px; border:1px solid #fca5a5;">❌ OUT</span>` : ''}
                           </td>
-                          <td style="padding:10px 14px; text-align:center; color:#374151; font-weight:600; border-right:1px solid #e2e8f0;">
-                            ${this.stockTotalValueUnlocked ? 
-                              (price ? `₹${price.toLocaleString('en-IN')}` : '<span style="color:#9ca3af;">—</span>') :
-                              '<span style="color:#94a3b8; font-family:monospace; font-size:14px;">••••</span>'
-                            }
+                          <td style="padding:10px 14px; text-align:center; color:#16a34a; font-weight:700; border-right:1px solid #e2e8f0;">
+                            ${price ? `₹${price.toLocaleString('en-IN')}` : '<span style="color:#9ca3af;">—</span>'}
                           </td>
                           <td style="padding:10px 14px; text-align:center; border-right:1px solid #e2e8f0;">
                             <span style="display:inline-block; background:${stockBg}; color:${stockColor}; font-weight:900; font-size:18px; min-width:48px; padding:4px 10px; border-radius:6px; border:1px solid ${stockColor}40;">
@@ -6034,7 +6105,7 @@ class OwnerPortalApp {
     const dealerId = '';
     const dealerName = 'Direct Purchase';
     const purchaseDate = document.getElementById('stk_purchaseDate')?.value || new Date().toISOString().split('T')[0];
-    const barcode = document.getElementById('stk_barcode')?.value || this.generateStockBarcode('Display');
+    const barcode = document.getElementById('stk_barcode')?.value?.trim() || displayId;
 
     if (!displayName || !displayId || stock === '' || stock === null) {
       alert('Please fill in Display Name, Display ID and Initial Stock.');
@@ -6273,10 +6344,9 @@ class OwnerPortalApp {
                 style="width:100%; background:#f8fafc; color:#111; border:1px solid #d1d5db;">
             </div>
             <div>
-              <label style="font-size:13px; font-weight:600; color:#374151; display:block; margin-bottom:4px;">Price (₹)</label>
-              <input id="edit_price" class="input" type="${this.stockTotalValueUnlocked ? 'number' : 'password'}" min="0" value="${item.price || ''}"
-                placeholder="${this.stockTotalValueUnlocked ? 'Leave blank if no price' : '••••'}"
-                ${this.stockTotalValueUnlocked ? '' : 'readonly'}
+              <label style="font-size:13px; font-weight:600; color:#374151; display:block; margin-bottom:4px;">Customer Price (₹)</label>
+              <input id="edit_price" class="input" type="number" min="0" value="${item.price || ''}"
+                placeholder="Customer price"
                 style="width:100%; background:#f8fafc; color:#111; border:1px solid #d1d5db;">
             </div>
           </div>
@@ -11264,8 +11334,8 @@ class OwnerPortalApp {
                 <input class="input" type="number" id="sp_stock" placeholder="Enter quantity" value="1" min="1" style="width:100%;">
               </div>
               <div>
-                <label style="font-size:13px; font-weight:600; color:#374151; display:block; margin-bottom:4px;">Auto Barcode</label>
-                <input class="input" id="sp_barcode" value="${this.generateStockBarcode('SparePart')}" readonly style="width:100%; background:#dbeafe; color:#1e40af; font-weight:800;">
+                <label style="font-size:13px; font-weight:600; color:#374151; display:block; margin-bottom:4px;">Barcode ID (Manual Typing)</label>
+                <input class="input" id="sp_barcode" placeholder="Enter barcode manually (e.g. SP-1001)" style="width:100%; background:#ffffff; color:#0f172a; font-weight:700;">
               </div>
             </div>
 
@@ -11385,10 +11455,7 @@ class OwnerPortalApp {
                             }
                           </td>
                           <td style="padding:10px 14px; text-align:center; color:#16a34a; font-weight:700; border-right:1px solid #e2e8f0;">
-                            ${this.spareTotalValueUnlocked ? 
-                              (customerPrice ? `₹${customerPrice.toLocaleString('en-IN')}` : '<span style="color:#9ca3af;">—</span>') :
-                              '<span style="color:#94a3b8; font-family:monospace; font-size:14px;">••••</span>'
-                            }
+                            ${customerPrice ? `₹${customerPrice.toLocaleString('en-IN')}` : '<span style="color:#9ca3af;">—</span>'}
                           </td>
                           <td style="padding:10px 14px; text-align:center; border-right:1px solid #e2e8f0;">
                             <span style="display:inline-block; background:${stockBg}; color:${stockColor}; font-weight:900; font-size:18px; min-width:48px; padding:4px 10px; border-radius:6px; border:1px solid ${stockColor}40;">
@@ -11519,7 +11586,7 @@ class OwnerPortalApp {
     const dealerId = '';
     const dealerName = 'Direct Purchase';
     const purchaseDate = document.getElementById('sp_purchaseDate')?.value || new Date().toISOString().split('T')[0];
-    const barcode = document.getElementById('sp_barcode')?.value || this.generateStockBarcode('SparePart');
+    const barcode = document.getElementById('sp_barcode')?.value?.trim() || partId;
 
     if (!partName || !partId || stock === '' || stock === null) {
       alert('Please fill in Part Name, Part ID and Initial Stock.');
@@ -11830,7 +11897,7 @@ class OwnerPortalApp {
         <td>${d.partId}</td>
         <td style="color:#dc2626;font-weight:900;">1 unit</td>
         <td style="color:#d97706;font-weight:700;">${this.spareTotalValueUnlocked ? (d.ownerPrice ? '₹' + Number(d.ownerPrice).toLocaleString('en-IN') : '—') : '••••'}</td>
-        <td style="color:#16a34a;font-weight:700;">${this.spareTotalValueUnlocked ? (d.customerPrice ? '₹' + Number(d.customerPrice).toLocaleString('en-IN') : '—') : '••••'}</td>
+        <td style="color:#16a34a;font-weight:700;">${d.customerPrice ? '₹' + Number(d.customerPrice).toLocaleString('en-IN') : '—'}</td>
       </tr>`).join('');
 
     win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Low Stock Alert — Spare Parts</title>
@@ -11880,7 +11947,7 @@ class OwnerPortalApp {
       <div class="row"><span class="label">Part ID</span><span class="value">${item.partId}</span></div>
       <div class="row"><span class="label">Remaining Stock</span><span class="value" style="color:#dc2626;">1 unit</span></div>
       <div class="row"><span class="label">Owner Price</span><span class="value" style="color:#d97706;">${this.spareTotalValueUnlocked ? (item.ownerPrice ? '₹' + Number(item.ownerPrice).toLocaleString('en-IN') : '—') : '••••'}</span></div>
-      <div class="row"><span class="label">Customer Price</span><span class="value" style="color:#16a34a;">${this.spareTotalValueUnlocked ? (item.customerPrice ? '₹' + Number(item.customerPrice).toLocaleString('en-IN') : '—') : '••••'}</span></div>
+      <div class="row"><span class="label">Customer Price</span><span class="value" style="color:#16a34a;">${item.customerPrice ? '₹' + Number(item.customerPrice).toLocaleString('en-IN') : '—'}</span></div>
     </div>
     <p style="margin-top:20px;font-size:13px;color:#dc2626;font-weight:700;">⚠️ Please reorder this part immediately!</p>
     <br>
@@ -11921,7 +11988,7 @@ class OwnerPortalApp {
               </div>
               <div>
                 <label style="font-size:13px;font-weight:600;color:#16a34a;display:block;margin-bottom:4px;">Customer Price (₹)</label>
-                <input class="input" type="${this.spareTotalValueUnlocked ? 'number' : 'password'}" id="edit_sp_customerPrice" value="${item.customerPrice || ''}" placeholder="${this.spareTotalValueUnlocked ? 'Selling price' : '••••'}" ${this.spareTotalValueUnlocked ? '' : 'readonly'} min="0" style="width:100%;background:#f8fafc;color:#111;border:1px solid #d1d5db;">
+                <input class="input" type="number" id="edit_sp_customerPrice" value="${item.customerPrice || ''}" placeholder="Customer price" min="0" style="width:100%;background:#f8fafc;color:#111;border:1px solid #d1d5db;">
               </div>
               <div>
                 <label style="font-size:13px;font-weight:600;color:#1d4ed8;display:block;margin-bottom:4px;">Stock Qty</label>
@@ -12049,7 +12116,7 @@ class OwnerPortalApp {
       p.partName || '',
       p.partId || '',
       this.spareTotalValueUnlocked ? (Number(p.ownerPrice) || 0) : '••••',
-      this.spareTotalValueUnlocked ? (Number(p.customerPrice) || 0) : '••••',
+      (Number(p.customerPrice) || 0),
       Number(p.stock) || 0,
       this.spareTotalValueUnlocked ? ((Number(p.customerPrice) || 0) * (Number(p.stock) || 0)) : '••••'
     ]);
