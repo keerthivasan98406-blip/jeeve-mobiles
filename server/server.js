@@ -785,7 +785,7 @@ app.post('/api/products', async (req, res) => {
 });
 
 // Update a product
-app.patch('/api/products/:id', async (req, res) => {
+const updateProductHandler = async (req, res) => {
   try {
     console.log('🔄 [SERVER] Updating product:', req.params.id);
     
@@ -840,7 +840,10 @@ app.patch('/api/products/:id', async (req, res) => {
     
     res.status(500).json({ error: error.message });
   }
-});
+};
+
+app.patch('/api/products/:id', updateProductHandler);
+app.put('/api/products/:id', updateProductHandler);
 
 app.delete('/api/products/:id', async (req, res) => {
   try {

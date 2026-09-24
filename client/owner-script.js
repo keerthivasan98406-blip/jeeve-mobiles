@@ -5345,12 +5345,12 @@ class OwnerPortalApp {
 
             <!-- Barcode & Serial Identifiers -->
             <div style="background: #eff6ff; border: 1px solid #93c5fd; border-radius: 10px; padding: 16px; margin-bottom: 20px;">
-              <div style="font-size: 14px; font-weight: 800; color: #1e40af; margin-bottom: 12px;">🏷️ Auto Barcode &amp; Device Identity</div>
+              <div style="font-size: 14px; font-weight: 800; color: #1e40af; margin-bottom: 12px;">🏷️ Barcode &amp; Device Identity</div>
 
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                 <div>
-                  <label style="display:block; font-size:12px; font-weight:700; color:#1e3a8a; margin-bottom:4px;">Auto Barcode (Unique)</label>
-                  <input type="text" id="productBarcode" value="${barcode}" readonly class="input" style="background:#dbeafe; color:#1e40af; font-weight:800; border:1px solid #93c5fd;">
+                  <label style="display:block; font-size:12px; font-weight:700; color:#1e3a8a; margin-bottom:4px;">Barcode (Manual / Unique)</label>
+                  <input type="text" id="productBarcode" value="${barcode}" placeholder="Type or scan barcode..." class="input" style="background:#fff; color:#111; font-weight:700; border:1px solid #cbd5e1;">
                 </div>
                 <div>
                   <label style="display:block; font-size:12px; font-weight:700; color:#1e3a8a; margin-bottom:4px;">Batch Stock Quantity *</label>
@@ -5478,6 +5478,15 @@ class OwnerPortalApp {
               </div>
             </div>
 
+            <!-- Barcode & Device Identity -->
+            <div style="background: #eff6ff; border: 1px solid #93c5fd; border-radius: 10px; padding: 16px; margin-bottom: 20px;">
+              <div style="font-size: 14px; font-weight: 800; color: #1e40af; margin-bottom: 12px;">🏷️ Barcode &amp; Device Identity</div>
+              <div class="form-field" style="margin-bottom: 0;">
+                <label style="display:block; font-size:12px; font-weight:700; color:#1e3a8a; margin-bottom:4px;">Barcode (Manual / Unique)</label>
+                <input type="text" id="productBarcode" value="${product.barcode || ''}" placeholder="Type or scan barcode..." class="input" style="background:#fff; color:#111; font-weight:700; border:1px solid #cbd5e1;">
+              </div>
+            </div>
+
             <div class="form-field">
               <label style="display:block; font-size:13px; font-weight:700; color:#1e293b; margin-bottom:6px;">Product Images</label>
               <div style="margin-bottom: 16px; padding: 16px; background: #f1f5f9; border-radius: 8px; border:1px solid #e2e8f0;">
@@ -5539,7 +5548,8 @@ class OwnerPortalApp {
       inStock: document.getElementById('productInStock')?.checked ?? true,
       image: document.getElementById('productImage')?.value || '📱',
       imageUrl: document.getElementById('productImageUrl')?.value || '',
-      imageUrl2: document.getElementById('productImageUrl2')?.value || ''
+      imageUrl2: document.getElementById('productImageUrl2')?.value || '',
+      barcode: barcode || undefined
     };
 
     try {
