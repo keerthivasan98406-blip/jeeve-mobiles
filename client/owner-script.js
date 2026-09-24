@@ -3018,8 +3018,9 @@ class OwnerPortalApp {
 
   printUnifiedThermalLabel({ barcode, title, subtitle, price }) {
     const barVal = (barcode || '').trim();
-    const itemTitle = (title || 'JIVI MOBILES').substring(0, 16).toUpperCase();
-    const itemSub = (subtitle || '').substring(0, 14).toUpperCase();
+    const shopTitle = (this.shopSettings?.shopName || 'JIVI MOBILES').substring(0, 22).toUpperCase();
+    const itemTitle = (title || 'PRODUCT ITEM').substring(0, 22).toUpperCase();
+    const itemSub = (subtitle || '').substring(0, 18).toUpperCase();
     const priceVal = Number(price) || 0;
     const priceStr = priceVal > 0 ? `₹${priceVal.toLocaleString('en-IN')}` : '';
 
@@ -3078,38 +3079,41 @@ class OwnerPortalApp {
       flex-direction: column;
       align-items: center;
       justify-content: flex-start;
-      padding: 4.5mm 0.5mm 0 0.5mm;
+      padding: 1.2mm 0.5mm 0.5mm 0.5mm;
       overflow: hidden;
       gap: 0;
     }
     .label:last-child { border-right: none; }
     .shop {
-      font-size: 7.5pt;
-      font-weight: 800;
+      font-size: 7pt;
+      font-weight: 900;
       text-align: center;
       color: #000;
-      line-height: 1.2;
-      letter-spacing: 0.3px;
+      line-height: 1.1;
+      letter-spacing: 0.2px;
       white-space: nowrap;
-      margin-bottom: 0.8mm;
+      margin-bottom: 0.3mm;
     }
     svg.bc, canvas.bc {
       display: block;
-      max-width: 31mm;
-      width: 31mm;
+      max-width: 30mm;
+      width: 30mm;
+      height: 9.5mm !important;
       margin: 0 auto;
+      object-fit: contain;
     }
     .barnum {
-      font-size: 7pt;
+      font-size: 6.5pt;
       font-weight: 700;
       color: #000;
-      letter-spacing: 1px;
+      letter-spacing: 0.8px;
       text-align: center;
-      margin-top: 0.5mm;
-      margin-bottom: 0.4mm;
+      margin-top: 0.3mm;
+      margin-bottom: 0.3mm;
+      line-height: 1.1;
     }
     .device {
-      font-size: 7.5pt;
+      font-size: 6.5pt;
       font-weight: 800;
       color: #000;
       text-align: center;
@@ -3119,9 +3123,11 @@ class OwnerPortalApp {
       max-width: 31mm;
       text-transform: uppercase;
       letter-spacing: 0.2px;
+      line-height: 1.1;
+      margin-top: 0.2mm;
     }
     .subinfo {
-      font-size: 6.5pt;
+      font-size: 6pt;
       font-weight: 700;
       color: #059669;
       text-align: center;
@@ -3132,6 +3138,7 @@ class OwnerPortalApp {
       text-transform: uppercase;
       letter-spacing: 0.2px;
       margin-top: 0.2mm;
+      line-height: 1.1;
     }
 
     /* ── Print button ── */
@@ -3207,7 +3214,7 @@ class OwnerPortalApp {
         flex-direction: column !important;
         align-items: center !important;
         justify-content: flex-start !important;
-        padding: 4.5mm 0.5mm 0 0.5mm !important;
+        padding: 1.2mm 0.5mm 0.5mm 0.5mm !important;
         box-sizing: border-box !important;
       }
       h2, .hint, .print-btn, .steps, .scale-wrap {
@@ -3228,21 +3235,21 @@ class OwnerPortalApp {
   <div class="scale-wrap">
     <div class="strip">
       <div class="label">
-        <div class="shop">JIVI MOBILES</div>
+        <div class="shop">${shopTitle}</div>
         <canvas class="bc" id="bc1"></canvas>
         <div class="barnum">${barVal}</div>
         <div class="device">${itemTitle}</div>
         ${priceStr ? `<div class="subinfo">${priceStr}</div>` : ''}
       </div>
       <div class="label">
-        <div class="shop">JIVI MOBILES</div>
+        <div class="shop">${shopTitle}</div>
         <canvas class="bc" id="bc2"></canvas>
         <div class="barnum">${barVal}</div>
         <div class="device">${itemTitle}</div>
         ${priceStr ? `<div class="subinfo">${priceStr}</div>` : ''}
       </div>
       <div class="label">
-        <div class="shop">JIVI MOBILES</div>
+        <div class="shop">${shopTitle}</div>
         <canvas class="bc" id="bc3"></canvas>
         <div class="barnum">${barVal}</div>
         <div class="device">${itemTitle}</div>
@@ -3266,7 +3273,7 @@ class OwnerPortalApp {
   <div class="print-strip" style="display:none;">
     <div class="label">
       <div class="label-inner">
-        <div class="shop">JIVI MOBILES</div>
+        <div class="shop">${shopTitle}</div>
         <canvas class="bc" id="bcp1"></canvas>
         <div class="barnum">${barVal}</div>
         <div class="device">${itemTitle}</div>
@@ -3275,7 +3282,7 @@ class OwnerPortalApp {
     </div>
     <div class="label">
       <div class="label-inner">
-        <div class="shop">JIVI MOBILES</div>
+        <div class="shop">${shopTitle}</div>
         <canvas class="bc" id="bcp2"></canvas>
         <div class="barnum">${barVal}</div>
         <div class="device">${itemTitle}</div>
@@ -3284,7 +3291,7 @@ class OwnerPortalApp {
     </div>
     <div class="label">
       <div class="label-inner">
-        <div class="shop">JIVI MOBILES</div>
+        <div class="shop">${shopTitle}</div>
         <canvas class="bc" id="bcp3"></canvas>
         <div class="barnum">${barVal}</div>
         <div class="device">${itemTitle}</div>
@@ -3298,14 +3305,18 @@ class OwnerPortalApp {
       const opts = {
         format: 'CODE128',
         width: 1.5,
-        height: 36,
+        height: 22,
         displayValue: false,
         margin: 0
       };
       ['bc1','bc2','bc3','bcp1','bcp2','bcp3'].forEach(id => {
         const c = document.getElementById(id);
         if (c && typeof JsBarcode !== 'undefined') {
-          try { JsBarcode(c, '${barVal}', opts); } catch(e) {}
+          try {
+            JsBarcode(c, '${barVal}', opts);
+            c.style.width = '30mm';
+            c.style.height = '9.5mm';
+          } catch(e) {}
         }
       });
     }
@@ -10416,38 +10427,41 @@ class OwnerPortalApp {
       flex-direction: column;
       align-items: center;
       justify-content: flex-start;
-      padding: 4.5mm 0.5mm 0 0.5mm;
+      padding: 1.2mm 0.5mm 0.5mm 0.5mm;
       overflow: hidden;
       gap: 0;
     }
     .label:last-child { border-right: none; }
     .shop {
-      font-size: 7.5pt;
-      font-weight: 800;
+      font-size: 7pt;
+      font-weight: 900;
       text-align: center;
       color: #000;
-      line-height: 1.2;
-      letter-spacing: 0.3px;
+      line-height: 1.1;
+      letter-spacing: 0.2px;
       white-space: nowrap;
-      margin-bottom: 0.8mm;
+      margin-bottom: 0.3mm;
     }
     svg.bc, canvas.bc {
       display: block;
-      max-width: 31mm;
-      width: 31mm;
+      max-width: 30mm;
+      width: 30mm;
+      height: 9.5mm !important;
       margin: 0 auto;
+      object-fit: contain;
     }
     .barnum {
-      font-size: 7pt;
+      font-size: 6.5pt;
       font-weight: 700;
       color: #000;
-      letter-spacing: 1px;
+      letter-spacing: 0.8px;
       text-align: center;
-      margin-top: 0.5mm;
-      margin-bottom: 0.4mm;
+      margin-top: 0.3mm;
+      margin-bottom: 0.3mm;
+      line-height: 1.1;
     }
     .device {
-      font-size: 7.5pt;
+      font-size: 6.5pt;
       font-weight: 800;
       color: #000;
       text-align: center;
@@ -10457,6 +10471,8 @@ class OwnerPortalApp {
       max-width: 31mm;
       text-transform: uppercase;
       letter-spacing: 0.2px;
+      line-height: 1.1;
+      margin-top: 0.2mm;
     }
     .custname {
       font-size: 6pt;
@@ -10470,6 +10486,7 @@ class OwnerPortalApp {
       text-transform: uppercase;
       letter-spacing: 0.2px;
       margin-top: 0.2mm;
+      line-height: 1.1;
     }
 
     /* ── Print button ── */
@@ -10545,7 +10562,7 @@ class OwnerPortalApp {
         flex-direction: column !important;
         align-items: center !important;
         justify-content: flex-start !important;
-        padding: 4.5mm 0.5mm 0 0.5mm !important;
+        padding: 1.2mm 0.5mm 0.5mm 0.5mm !important;
         box-sizing: border-box !important;
       }
       h2, .hint, .print-btn, .steps, .scale-wrap {
@@ -10635,15 +10652,12 @@ class OwnerPortalApp {
     };
     function renderBarcodes() {
       try {
-        /* Render barcode at high resolution then stretch to fill label width.
-           width:2 gives thinner bars with clear gaps.
-           We then force the canvas CSS width to fill the full label (31mm ≈ 117px at 96dpi). */
         var opts = {
           format: 'CODE128',
-          width: 2,
-          height: 35,
+          width: 1.5,
+          height: 22,
           displayValue: false,
-          margin: 8,
+          margin: 0,
           background: '#ffffff',
           lineColor: '#000000'
         };
@@ -10651,9 +10665,8 @@ class OwnerPortalApp {
           var canvas = document.getElementById(id);
           if (!canvas) return;
           JsBarcode(canvas, '${barVal}', opts);
-          // Force canvas to fill the label width — bars scale proportionally
-          canvas.style.width  = '31mm';
-          canvas.style.height = 'auto';
+          canvas.style.width  = '30mm';
+          canvas.style.height = '9.5mm';
         });
       } catch(e) { console.error('Barcode error:', e); }
     }
@@ -12467,7 +12480,7 @@ class OwnerPortalApp {
         flex-direction: column !important;
         align-items: center !important;
         justify-content: flex-start !important;
-        padding: 4.5mm 0.5mm 0 0.5mm !important;
+        padding: 1.2mm 0.5mm 0.5mm 0.5mm !important;
         box-sizing: border-box !important;
       }
       h2, .hint, .print-btn, .steps, .scale-wrap { display: none !important; }
@@ -12483,19 +12496,19 @@ class OwnerPortalApp {
   <div class="scale-wrap">
     <div class="strip">
       <div class="label">
-        <div class="shop">MANJULA MOBILES</div>
+        <div class="shop">JIVI MOBILES</div>
         <canvas class="bc" id="bc1"></canvas>
         <div class="barnum">${barVal}</div>
         <div class="device">${dev}</div>
       </div>
       <div class="label">
-        <div class="shop">MANJULA MOBILES</div>
+        <div class="shop">JIVI MOBILES</div>
         <canvas class="bc" id="bc2"></canvas>
         <div class="barnum">${barVal}</div>
         <div class="device">${dev}</div>
       </div>
       <div class="label">
-        <div class="shop">MANJULA MOBILES</div>
+        <div class="shop">JIVI MOBILES</div>
         <canvas class="bc" id="bc3"></canvas>
         <div class="barnum">${barVal}</div>
         <div class="device">${dev}</div>
@@ -12514,7 +12527,7 @@ class OwnerPortalApp {
   <div class="print-strip" style="display:none;">
     <div class="label">
       <div class="label-inner">
-        <div class="shop">MANJULA MOBILES</div>
+        <div class="shop">JIVI MOBILES</div>
         <canvas class="bc" id="bcp1"></canvas>
         <div class="barnum">${barVal}</div>
         <div class="device">${dev}</div>
@@ -12522,7 +12535,7 @@ class OwnerPortalApp {
     </div>
     <div class="label">
       <div class="label-inner">
-        <div class="shop">MANJULA MOBILES</div>
+        <div class="shop">JIVI MOBILES</div>
         <canvas class="bc" id="bcp2"></canvas>
         <div class="barnum">${barVal}</div>
         <div class="device">${dev}</div>
@@ -12530,7 +12543,7 @@ class OwnerPortalApp {
     </div>
     <div class="label">
       <div class="label-inner">
-        <div class="shop">MANJULA MOBILES</div>
+        <div class="shop">JIVI MOBILES</div>
         <canvas class="bc" id="bcp3"></canvas>
         <div class="barnum">${barVal}</div>
         <div class="device">${dev}</div>
@@ -12549,10 +12562,10 @@ class OwnerPortalApp {
       try {
         var opts = {
           format: 'CODE128',
-          width: 2,
-          height: 35,
+          width: 1.5,
+          height: 22,
           displayValue: false,
-          margin: 8,
+          margin: 0,
           background: '#ffffff',
           lineColor: '#000000'
         };
@@ -12560,8 +12573,8 @@ class OwnerPortalApp {
           var canvas = document.getElementById(id);
           if (!canvas) return;
           JsBarcode(canvas, '${barVal}', opts);
-          canvas.style.width  = '31mm';
-          canvas.style.height = 'auto';
+          canvas.style.width  = '30mm';
+          canvas.style.height = '9.5mm';
         });
       } catch(e) { console.error('Barcode error:', e); }
     }
