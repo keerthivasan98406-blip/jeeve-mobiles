@@ -5360,8 +5360,8 @@ class OwnerPortalApp {
 
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                 <div>
-                  <label style="display:block; font-size:12px; font-weight:700; color:#1e3a8a; margin-bottom:4px;">Barcode (Manual / Unique)</label>
-                  <input type="text" id="productBarcode" value="${barcode}" placeholder="Type or scan barcode..." class="input" style="background:#fff; color:#111; font-weight:700; border:1px solid #cbd5e1;">
+                  <label style="display:block; font-size:12px; font-weight:700; color:#1e3a8a; margin-bottom:4px;">Barcode</label>
+                  <input type="text" id="productBarcode" value="" placeholder="Type or scan barcode..." class="input" style="background:#fff; color:#111; font-weight:700; border:1px solid #cbd5e1;">
                 </div>
                 <div>
                   <label style="display:block; font-size:12px; font-weight:700; color:#1e3a8a; margin-bottom:4px;">Batch Stock Quantity *</label>
@@ -5493,7 +5493,7 @@ class OwnerPortalApp {
             <div style="background: #eff6ff; border: 1px solid #93c5fd; border-radius: 10px; padding: 16px; margin-bottom: 20px;">
               <div style="font-size: 14px; font-weight: 800; color: #1e40af; margin-bottom: 12px;">🏷️ Barcode &amp; Device Identity</div>
               <div class="form-field" style="margin-bottom: 0;">
-                <label style="display:block; font-size:12px; font-weight:700; color:#1e3a8a; margin-bottom:4px;">Barcode (Manual / Unique)</label>
+                <label style="display:block; font-size:12px; font-weight:700; color:#1e3a8a; margin-bottom:4px;">Barcode</label>
                 <input type="text" id="productBarcode" value="${product.barcode || ''}" placeholder="Type or scan barcode..." class="input" style="background:#fff; color:#111; font-weight:700; border:1px solid #cbd5e1;">
               </div>
             </div>
